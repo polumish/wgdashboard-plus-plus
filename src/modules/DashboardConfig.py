@@ -86,6 +86,7 @@ class DashboardConfig:
             },
             "Security": {
                 "trusted_ips": "",
+                "session_timeout": "3600",
             },
             "WireGuardConfiguration": {
                 "autostart": ""

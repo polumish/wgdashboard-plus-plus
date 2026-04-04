@@ -191,6 +191,17 @@ CONFIGURATION_PATH = os.getenv('CONFIGURATION_PATH', '.')
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 5206928
 app.secret_key = secrets.token_urlsafe(32)
 app.json = CustomJsonEncoder(app)
+
+def _applySessionTimeout():
+    timeout = DashboardConfig.GetConfig("Security", "session_timeout")[1]
+    try:
+        t = int(timeout)
+    except (ValueError, TypeError):
+        t = 3600
+    if t <= 0:
+        app.permanent_session_lifetime = timedelta(days=365 * 100)
+    else:
+        app.permanent_session_lifetime = timedelta(seconds=t)
 with app.app_context():
     SystemStatus = SystemStatus()
     DashboardConfig = DashboardConfig()
@@ -204,6 +215,7 @@ with app.app_context():
     InitWireguardConfigurationsList(startup=True)
     DashboardClients: DashboardClients = DashboardClients(WireguardConfigurations)
     app.register_blueprint(createClientBlueprint(WireguardConfigurations, DashboardConfig, DashboardClients))
+    _applySessionTimeout()
 
 _, APP_PREFIX = DashboardConfig.GetConfig("Server", "app_prefix")
 cors = CORS(app, resources={rf"{APP_PREFIX}/api/*": {
@@ -676,6 +688,8 @@ def API_updateDashboardConfigurationItem():
             WireguardConfigurations.clear()
             WireguardConfigurations.clear()
             InitWireguardConfigurationsList()
+    if data['section'] == "Security" and data['key'] == 'session_timeout':
+        _applySessionTimeout()
     return ResponseObject(True, data=DashboardConfig.GetConfig(data["section"], data["key"])[1])
 
 @app.get(f'{APP_PREFIX}/api/getDashboardAPIKeys')
