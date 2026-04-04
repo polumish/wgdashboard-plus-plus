@@ -113,11 +113,11 @@ const downloadPeer = async (peerId) => {
 	downloadingPeer.value = peerId
 	const data = await store.downloadManagedPeer(configName, peerId)
 	if (data) {
-		const blob = new Blob([data], {type: 'text/plain'})
+		const blob = new Blob([data.file], {type: 'text/plain'})
 		const url = URL.createObjectURL(blob)
 		const a = document.createElement('a')
 		a.href = url
-		a.download = `${configName}_peer.conf`
+		a.download = `${data.fileName || configName}.conf`
 		a.click()
 		URL.revokeObjectURL(url)
 	}
