@@ -197,8 +197,9 @@ export default {
 .navbar-container{
 	height: 100vh;
 	position: relative;
-	width: 220px;
-	min-width: 220px;
+	width: auto;
+	min-width: 180px;
+	max-width: 260px;
 }
 
 
