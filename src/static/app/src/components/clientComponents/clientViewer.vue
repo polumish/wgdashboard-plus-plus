@@ -9,6 +9,7 @@ import { DashboardConfigurationStore } from "@/stores/DashboardConfigurationStor
 import {computed, reactive, ref, watch} from "vue";
 import LocaleText from "@/components/text/localeText.vue";
 import ClientAssignedPeers from "@/components/clientComponents/clientAssignedPeers.vue";
+import ClientConfigAccess from "@/components/clientComponents/clientConfigAccess.vue";
 import ClientResetPassword from "@/components/clientComponents/clientResetPassword.vue";
 import ClientDelete from "@/components/clientComponents/clientDelete.vue";
 const assignmentStore = DashboardClientAssignmentStore()
@@ -115,6 +116,9 @@ const deleteSuccess = async () => {
 				@refresh="getAssignedPeers()"
 				:clientAssignedPeers="clientAssignedPeers"
 				:client="client"></ClientAssignedPeers>
+			<Suspense>
+				<ClientConfigAccess :client="client"></ClientConfigAccess>
+			</Suspense>
 <!--			<ClientResetPassword-->
 <!--				:client="client" v-if="client.ClientGroup === 'Local'"></ClientResetPassword>-->
 			<ClientDelete

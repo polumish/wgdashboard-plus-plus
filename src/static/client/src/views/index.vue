@@ -52,10 +52,12 @@ const selectedConfig = ref(undefined)
 			</strong>
 		</a>
 		<div class="ms-auto px-3 d-flex gap-2 nav-links">
-			<RouterLink to="/settings" class=" text-body btn btn-outline-body rounded-3 ms-auto btn-sm" aria-current="page" href="#">
+			<RouterLink to="/managed" class="text-body btn btn-outline-body rounded-3 btn-sm" aria-current="page">
+				<i class="bi bi-shield-lock me-sm-2"></i>
+				<span>Managed</span>
+			</RouterLink>
+			<RouterLink to="/settings" class="text-body btn btn-outline-body rounded-3 btn-sm" aria-current="page">
 				<i class="bi bi-gear-fill me-sm-2"></i>
-
-
 				<span>Settings</span>
 			</RouterLink>
 			<a role="button" @click="signOut()" class="btn btn-outline-danger rounded-3 btn-sm"

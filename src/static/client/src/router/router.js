@@ -7,6 +7,8 @@ import {axiosGet, requestURl} from "@/utilities/request.js";
 import {clientStore} from "@/stores/clientStore.js";
 import Settings from "@/views/settings.vue";
 import ForgotPassword from "@/views/forgotPassword.vue";
+import ManagedConfigurations from "@/views/managedConfigurations.vue";
+import ManagedConfigPeers from "@/views/managedConfigPeers.vue";
 
 const router = createRouter({
 	history: createWebHashHistory(),
@@ -18,6 +20,22 @@ const router = createRouter({
 				auth: true
 			},
 			name: "Home"
+		},
+		{
+			path: '/managed',
+			component: ManagedConfigurations,
+			meta: {
+				auth: true
+			},
+			name: "Managed Configurations"
+		},
+		{
+			path: '/managed/:configName',
+			component: ManagedConfigPeers,
+			meta: {
+				auth: true
+			},
+			name: "Manage Peers"
 		},
 		{
 			path: '/settings',
