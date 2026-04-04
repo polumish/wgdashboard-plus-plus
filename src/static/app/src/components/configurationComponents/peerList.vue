@@ -508,7 +508,7 @@ watch(() => route.query.id, (newValue) => {
 		</PeerSearch>
 		<!-- Table View -->
 		<div v-if="dashboardStore.Configuration.Server.dashboard_peer_list_display === 'table'" class="table-responsive">
-			<table class="table table-hover align-middle mb-0">
+			<table class="table table-striped table-hover align-middle mb-0">
 				<thead class="table-light">
 					<tr>
 						<th style="min-width: 80px" role="button" @click="tableSortBy = 'status'; tableSortAsc = tableSortBy === 'status' ? !tableSortAsc : true" title="Sort by status">

@@ -135,6 +135,7 @@ export default {
 						:display="this.wireguardConfigurationsStore.CurrentDisplay"
 						v-for="(c, index) in configurations"
 						:delay="index*0.03 + 's'"
+						:index="index"
 						v-else-if="this.wireguardConfigurationsStore.ConfigurationLoaded"
 						:key="c.Name" :c="c"></ConfigurationCard>
 				</TransitionGroup>

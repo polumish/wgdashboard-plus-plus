@@ -15,7 +15,8 @@ export default {
 			PrivateKey: String
 		},
 		delay: String,
-		display: String
+		display: String,
+		index: Number
 	},
 	data(){
 		return{
@@ -49,7 +50,7 @@ export default {
 
 <template>
 	<div class="col-12" :class="{'col-lg-6 col-xl-4': this.display === 'Grid'}">
-		<div class="card conf_card rounded-3 shadow text-decoration-none">
+		<div class="card conf_card rounded-3 shadow text-decoration-none" :class="{'conf_card_stripe': index % 2 === 1}">
 			<RouterLink :to="'/configuration/' + c.Name + '/peers'" class="card-body d-flex align-items-center gap-3 flex-wrap text-decoration-none">
 				<h6 class="mb-0"><span class="dot" :class="{active: c.Status}"></span></h6>
 				<h6 class="card-title mb-0 d-flex align-items-center gap-2">
