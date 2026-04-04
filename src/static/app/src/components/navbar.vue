@@ -55,7 +55,7 @@ export default {
 </script>
 
 <template>
-	<div class="col-md-3 col-lg-2 d-md-block p-2 navbar-container bg-transparent"
+	<div class="d-md-block p-2 navbar-container bg-transparent"
 	     :class="{active: this.dashboardConfigurationStore.ShowNavBar}"
 	     :data-bs-theme="dashboardConfigurationStore.Configuration.Server.dashboard_theme"
 	>
@@ -197,6 +197,8 @@ export default {
 .navbar-container{
 	height: 100vh;
 	position: relative;
+	width: 220px;
+	min-width: 220px;
 }
 
 
