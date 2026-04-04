@@ -52,6 +52,10 @@ WgDashboard++ uses its own versioning independent of upstream:
 
 Current: **v1.0**
 
+## Deployment
+
+See [`DEPLOYMENT.md`](DEPLOYMENT.md) for installation, systemd service, nginx reverse proxy, and GitLab CI/CD auto-deploy setup.
+
 ## License
 
 Apache License 2.0, same as upstream WGDashboard.
