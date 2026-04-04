@@ -1,0 +1,46 @@
+stages:
+  - test
+  - deploy
+
+test:
+  stage: test
+  tags:
+    - wgdashboard
+  variables:
+    PYTHONPATH: "$CI_PROJECT_DIR/src"
+  before_script:
+    - source /opt/WGDashboard/src/venv/bin/activate
+    - pip install pytest --quiet 2>/dev/null
+  script:
+    - cd "$CI_PROJECT_DIR/src"
+    - python -m pytest tests/ -v --tb=short
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+
+deploy:
+  stage: deploy
+  tags:
+    - wgdashboard
+  script:
+    - cd /opt/WGDashboard
+    - git fetch gitlab
+    - git checkout main
+    - git merge gitlab/main --ff-only
+    - cd src
+    - source venv/bin/activate
+    - pip install -r requirements.txt --quiet 2>/dev/null
+    - |
+      if [ -f gunicorn.pid ] && kill -0 $(cat gunicorn.pid) 2>/dev/null; then
+        kill -HUP $(cat gunicorn.pid)
+        echo "Gunicorn gracefully reloaded"
+      else
+        ./wgd.sh restart
+        echo "Gunicorn restarted via wgd.sh"
+      fi
+    - sleep 2
+    - curl -sf http://localhost:10086/api/handshake || (echo "Health check failed!" && exit 1)
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  environment:
+    name: production
+    url: https://dashboard.net.half.net.ua
