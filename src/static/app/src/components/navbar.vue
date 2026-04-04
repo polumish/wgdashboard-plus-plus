@@ -200,6 +200,7 @@ export default {
 	width: auto;
 	min-width: 180px;
 	max-width: 260px;
+	flex-shrink: 0;
 }
 
 
