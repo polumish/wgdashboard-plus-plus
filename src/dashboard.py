@@ -310,12 +310,29 @@ def API_AuthenticateLogin():
                            DashboardConfig.GetConfig("Account", "password")[1].encode("utf-8"))
     totpEnabled = DashboardConfig.GetConfig("Account", "enable_totp")[1]
     totpValid = False
+    totpBypassed = False
     if totpEnabled:
-        totpValid = pyotp.TOTP(DashboardConfig.GetConfig("Account", "totp_key")[1]).now() == data['totp']
+        clientIP = request.headers.get("X-Forwarded-For", request.remote_addr)
+        if clientIP:
+            clientIP = clientIP.split(",")[0].strip()
+        trustedIPs = DashboardConfig.GetConfig("Security", "trusted_ips")[1]
+        if trustedIPs and clientIP:
+            for tip in trustedIPs.split(","):
+                tip = tip.strip()
+                if not tip:
+                    continue
+                try:
+                    if ipaddress.ip_address(clientIP) in ipaddress.ip_network(tip, strict=False):
+                        totpBypassed = True
+                        break
+                except ValueError:
+                    pass
+        if not totpBypassed:
+            totpValid = pyotp.TOTP(DashboardConfig.GetConfig("Account", "totp_key")[1]).now() == data['totp']
 
     if (valid
             and data['username'] == DashboardConfig.GetConfig("Account", "username")[1]
-            and ((totpEnabled and totpValid) or not totpEnabled)
+            and ((totpEnabled and (totpValid or totpBypassed)) or not totpEnabled)
     ):
         authToken = hashlib.sha256(f"{data['username']}{datetime.now()}".encode()).hexdigest()
         session['role'] = 'admin'

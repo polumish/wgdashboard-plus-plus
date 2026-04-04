@@ -84,6 +84,9 @@ class DashboardConfig:
             "Clients": {
                 "enable": "true",
             },
+            "Security": {
+                "trusted_ips": "",
+            },
             "WireGuardConfiguration": {
                 "autostart": ""
             }

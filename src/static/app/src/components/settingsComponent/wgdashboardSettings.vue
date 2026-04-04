@@ -11,6 +11,7 @@ import AccountSettingsMFA from "@/components/settingsComponent/accountSettingsMF
 import AccountSettingsInputUsername from "@/components/settingsComponent/accountSettingsInputUsername.vue";
 import DashboardEmailSettings from "@/components/settingsComponent/dashboardEmailSettings.vue";
 import DashboardWebHooks from "@/components/settingsComponent/dashboardWebHooks.vue";
+import TrustedIPSettings from "@/components/settingsComponent/trustedIPSettings.vue";
 
 const dashboardConfigurationStore = DashboardConfigurationStore()
 
@@ -76,6 +77,7 @@ const dashboardConfigurationStore = DashboardConfigurationStore()
 			</div>
 		</div>
 
+		<TrustedIPSettings></TrustedIPSettings>
 		<DashboardAPIKeys></DashboardAPIKeys>
 		<DashboardEmailSettings></DashboardEmailSettings>
 	</div>

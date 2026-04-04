@@ -29,14 +29,8 @@ deploy:
     - cd src
     - source venv/bin/activate
     - pip install -r requirements.txt --quiet 2>/dev/null
-    - |
-      if [ -f gunicorn.pid ] && kill -0 $(cat gunicorn.pid) 2>/dev/null; then
-        kill -HUP $(cat gunicorn.pid)
-        echo "Gunicorn gracefully reloaded"
-      else
-        ./wgd.sh restart
-        echo "Gunicorn restarted via wgd.sh"
-      fi
+    - ./wgd.sh restart
+    - echo "Gunicorn restarted"
     - sleep 5
     - |
       for i in 1 2 3; do
