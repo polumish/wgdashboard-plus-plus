@@ -54,8 +54,10 @@ mirror-github:
   stage: mirror
   tags:
     - wgdashboard
+  variables:
+    GIT_STRATEGY: none
   script:
-    - cd "$CI_PROJECT_DIR"
+    - cd /opt/WGDashboard
     - git remote remove github 2>/dev/null || true
     - git remote add github "https://polumish:${GITHUB_TOKEN}@github.com/polumish/wgdashboard-plus-plus.git"
     - git push github main --force
