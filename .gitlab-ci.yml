@@ -3,6 +3,7 @@ stages:
   - deploy
   - mirror
   - upstream-watch
+  - docker
 
 test:
   stage: test
@@ -76,4 +77,21 @@ upstream-watch:
     - python3 /opt/WGDashboard/scripts/check_upstream.py
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
+  allow_failure: true
+
+docker-publish:
+  stage: docker
+  tags:
+    - wgdashboard
+  script:
+    - cd /opt/WGDashboard
+    - echo "$GH_MIRROR_TOKEN" | docker login ghcr.io -u polumish --password-stdin
+    - IMAGE="ghcr.io/polumish/wgdashboard-plus-plus"
+    - VERSION="${CI_COMMIT_TAG#v}"
+    - docker build -t "${IMAGE}:${CI_COMMIT_TAG}" -t "${IMAGE}:latest" -f docker/Dockerfile .
+    - docker push "${IMAGE}:${CI_COMMIT_TAG}"
+    - docker push "${IMAGE}:latest"
+    - docker logout ghcr.io
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+/
   allow_failure: true
