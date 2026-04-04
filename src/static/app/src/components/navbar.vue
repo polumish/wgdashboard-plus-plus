@@ -110,13 +110,12 @@ export default {
 				</h6>
 				<ul class="nav flex-column px-2 gap-1">
 					<li class="nav-item" v-for="c in this.wireguardConfigurationsStore.sortConfigurations">
-						<RouterLink :to="'/configuration/'+c.Name + '/peers'" class="nav-link nav-conf-link rounded-3"
+						<RouterLink :to="'/configuration/'+c.Name + '/peers'" class="nav-link nav-conf-link rounded-3 d-flex align-items-center"
 						            active-class="active"
-						            style="display: flex !important; align-items: center;"
 						            >
 							<span class="dot me-2 flex-shrink-0" :class="{active: c.Status}"></span>
-							<span class="text-truncate" style="text-align: left;">{{c.Name}}</span>
-							<small style="margin-left: auto; font-size: 0.7rem; white-space: nowrap;">
+							<span class="text-truncate" style="min-width: 0; text-align: left;">{{c.Name}}</span>
+							<small class="ms-auto" style="font-size: 0.7rem; white-space: nowrap;">
 								<span class="text-success">{{c.ConnectedPeers}}</span><span class="text-muted">/{{c.TotalPeers}}</span>
 							</small>
 						</RouterLink>

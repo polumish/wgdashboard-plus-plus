@@ -115,7 +115,7 @@ const setFetchPeerListInterval = () => {
 	clearInterval(fetchPeerListInterval.value)
 	fetchPeerListInterval.value = setInterval(async () => {
 		await fetchPeerList()
-	},  parseInt(dashboardStore.Configuration.Server.dashboard_refresh_interval))
+	},  parseInt(dashboardStore.Configuration.Server.dashboard_refresh_interval, 10) || 10000)
 }
 setFetchPeerListInterval()
 onBeforeUnmount(() => {
@@ -406,11 +406,13 @@ watch(() => route.query.id, (newValue) => {
 		</div>
 		<Transition name="fade2">
 			<div v-if="configInfoExpanded" class="border-top">
-				<ConfigurationDescription :configuration="configurationInfo"></ConfigurationDescription>
+				<div class="px-3 pt-2">
+					<ConfigurationDescription :configuration="configurationInfo"></ConfigurationDescription>
+				</div>
 				<div class="row mt-3 gy-2 gx-2 mb-2 px-3">
 					<div class="col-12 col-lg-3">
 						<div class="card rounded-3 bg-transparent  h-100">
-							<div class="card-body py-2 d-flex flex-column justify-content-center">
+							<div class="card-body py-2 d-flex flex-column">
 								<p class="mb-0 text-muted"><small>
 									<LocaleText t="Address"></LocaleText>
 								</small></p>
@@ -420,7 +422,7 @@ watch(() => route.query.id, (newValue) => {
 					</div>
 					<div class="col-12 col-lg-3">
 						<div class="card rounded-3 bg-transparent h-100">
-							<div class="card-body py-2 d-flex flex-column justify-content-center">
+							<div class="card-body py-2 d-flex flex-column">
 								<p class="mb-0 text-muted"><small>
 									<LocaleText t="Listen Port"></LocaleText>
 								</small></p>
@@ -430,7 +432,7 @@ watch(() => route.query.id, (newValue) => {
 					</div>
 					<div style="word-break: break-all" class="col-12 col-lg-6">
 						<div class="card rounded-3 bg-transparent h-100">
-							<div class="card-body py-2 d-flex flex-column justify-content-center">
+							<div class="card-body py-2 d-flex flex-column">
 								<p class="mb-0 text-muted"><small>
 									<LocaleText t="Public Key"></LocaleText>
 								</small></p>
@@ -505,7 +507,7 @@ watch(() => route.query.id, (newValue) => {
 			:configuration="configurationInfo">
 		</PeerSearch>
 		<!-- Table View -->
-		<div v-if="dashboardStore.Configuration.Server.dashboard_peer_list_display === 'table'" class="table-responsive" style="overflow: visible;">
+		<div v-if="dashboardStore.Configuration.Server.dashboard_peer_list_display === 'table'" class="table-responsive">
 			<table class="table table-hover align-middle mb-0">
 				<thead class="table-light">
 					<tr>
@@ -562,12 +564,12 @@ watch(() => route.query.id, (newValue) => {
 							</small>
 						</td>
 						<td><small class="text-muted"><samp>{{ peer.endpoint }}</samp></small></td>
-						<td @click.stop class="position-relative">
-							<div class="dropup dropstart">
-								<button class="btn btn-sm btn-body rounded-3" data-bs-toggle="dropdown">
+						<td @click.stop>
+							<div class="dropdown">
+								<button class="btn btn-sm btn-body rounded-3" data-bs-toggle="dropdown" data-bs-display="static">
 									<i class="bi bi-three-dots-vertical"></i>
 								</button>
-								<ul class="dropdown-menu rounded-3 shadow" style="min-width: 200px; position: fixed;">
+								<ul class="dropdown-menu dropdown-menu-end rounded-3 shadow" style="min-width: 200px;">
 									<template v-if="peer.private_key">
 										<li class="d-flex px-2 gap-1">
 											<button class="btn btn-sm btn-body rounded-3 flex-fill" title="Download" @click="tableDownloadPeer(peer)"><i class="bi bi-download"></i></button>
