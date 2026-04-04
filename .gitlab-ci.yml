@@ -37,8 +37,18 @@ deploy:
         ./wgd.sh restart
         echo "Gunicorn restarted via wgd.sh"
       fi
-    - sleep 2
-    - curl -sf http://localhost:10086/api/handshake || (echo "Health check failed!" && exit 1)
+    - sleep 5
+    - |
+      for i in 1 2 3; do
+        if curl -sf http://localhost:10086/api/getDashboardTheme > /dev/null 2>&1; then
+          echo "Health check passed"
+          exit 0
+        fi
+        echo "Attempt $i: waiting for gunicorn..."
+        sleep 3
+      done
+      echo "Health check failed after 3 attempts!"
+      exit 1
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
   environment:
