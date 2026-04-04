@@ -592,7 +592,10 @@ watch(() => route.query.id, (newValue) => {
 		<!-- Card/List View -->
 		<TransitionGroup v-else name="peerList" tag="div" class="row gx-2 gy-2 z-0 position-relative">
 			<div class="col-12"
-			     :class="{'col-lg-6 col-xl-4': dashboardStore.Configuration.Server.dashboard_peer_list_display === 'grid'}"
+			     :class="{
+			     	'col-lg-6 col-xl-4': dashboardStore.Configuration.Server.dashboard_peer_list_display === 'grid',
+			     	'col-6': dashboardStore.Configuration.Server.dashboard_peer_list_display === 'columns'
+			     }"
 			     :key="peer.id"
 			     v-for="(peer, order) in searchPeers">
 				<Peer :Peer="peer"

@@ -36,6 +36,7 @@ export default {
 			},
 			display: {
 				table: GetLocale('Table'),
+				columns: GetLocale('Columns'),
 				grid: GetLocale('Grid'),
 				list: GetLocale('List')
 			},
