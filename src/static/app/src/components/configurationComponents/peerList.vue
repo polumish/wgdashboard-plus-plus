@@ -279,6 +279,15 @@ const tableSortedPeers = computed(() => {
 	})
 })
 
+const columnsLeftPeers = computed(() => {
+	const all = tableSortedPeers.value
+	return all.slice(0, Math.ceil(all.length / 2))
+})
+const columnsRightPeers = computed(() => {
+	const all = tableSortedPeers.value
+	return all.slice(Math.ceil(all.length / 2))
+})
+
 const tableDownloadPeer = (peer) => {
 	fetchGet("/api/downloadPeer/" + route.params.id, { id: peer.id }, (res) => {
 		if (res.status) {
@@ -589,12 +598,48 @@ watch(() => route.query.id, (newValue) => {
 				</tbody>
 			</table>
 		</div>
+		<!-- Columns View (dual tables) -->
+		<div v-else-if="dashboardStore.Configuration.Server.dashboard_peer_list_display === 'columns'" class="d-flex gap-2" style="align-items: flex-start;">
+			<div class="flex-fill" style="min-width: 0;" v-for="(half, hi) in [columnsLeftPeers, columnsRightPeers]" :key="hi">
+				<table class="table table-striped table-hover align-middle mb-0" style="font-size: 0.82rem;">
+					<thead class="table-light">
+						<tr>
+							<th style="width: 14px"></th>
+							<th><small><LocaleText t="Name"></LocaleText></small></th>
+							<th><small><LocaleText t="Allowed IPs"></LocaleText></small></th>
+							<th><small><LocaleText t="Traffic"></LocaleText></small></th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr v-for="peer in half" :key="peer.id"
+							:class="{'table-warning': peer.restricted}"
+							role="button"
+							@click="configurationModals.peerSetting.modalOpen = true; configurationModalSelectedPeer = peer">
+							<td style="padding: 0.25rem;">
+								<span class="d-inline-block rounded-circle"
+									  :style="{width: '8px', height: '8px', backgroundColor: peer.status === 'running' ? '#28a745' : '#6c757d'}">
+								</span>
+							</td>
+							<td>
+								<strong style="font-size: 0.82rem;">{{ peer.name || 'Untitled' }}</strong>
+							</td>
+							<td><small><samp>{{ peer.allowed_ip }}</samp></small></td>
+							<td>
+								<small style="white-space: nowrap;">
+									<i class="bi bi-arrow-down text-success"></i>{{ (peer.cumu_receive + peer.total_receive).toFixed(2) }}
+									<i class="bi bi-arrow-up text-primary ms-1"></i>{{ (peer.cumu_sent + peer.total_sent).toFixed(2) }}
+								</small>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
 		<!-- Card/List View -->
 		<TransitionGroup v-else name="peerList" tag="div" class="row gx-2 gy-2 z-0 position-relative">
 			<div class="col-12"
 			     :class="{
-			     	'col-lg-6 col-xl-4': dashboardStore.Configuration.Server.dashboard_peer_list_display === 'grid',
-			     	'col-6': dashboardStore.Configuration.Server.dashboard_peer_list_display === 'columns'
+			     	'col-lg-6 col-xl-4': dashboardStore.Configuration.Server.dashboard_peer_list_display === 'grid'
 			     }"
 			     :key="peer.id"
 			     v-for="(peer, order) in searchPeers">
