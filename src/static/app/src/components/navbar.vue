@@ -234,4 +234,11 @@ export default {
 	filter: blur(3px);
 	opacity: 0;
 }
+
+.nav-conf-link {
+	display: flex !important;
+	align-items: center !important;
+	justify-content: flex-start !important;
+	text-align: left !important;
+}
 </style>
