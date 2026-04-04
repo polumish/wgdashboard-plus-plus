@@ -608,6 +608,7 @@ watch(() => route.query.id, (newValue) => {
 							<th><small><LocaleText t="Name"></LocaleText></small></th>
 							<th><small><LocaleText t="Allowed IPs"></LocaleText></small></th>
 							<th><small><LocaleText t="Traffic"></LocaleText></small></th>
+							<th style="width: 30px"></th>
 						</tr>
 					</thead>
 					<tbody>
@@ -629,6 +630,20 @@ watch(() => route.query.id, (newValue) => {
 									<i class="bi bi-arrow-down text-success"></i>{{ (peer.cumu_receive + peer.total_receive).toFixed(2) }}
 									<i class="bi bi-arrow-up text-primary ms-1"></i>{{ (peer.cumu_sent + peer.total_sent).toFixed(2) }}
 								</small>
+							</td>
+							<td @click.stop>
+								<div class="dropdown">
+									<button class="btn btn-sm btn-body rounded-3" data-bs-toggle="dropdown" data-bs-display="static">
+										<i class="bi bi-three-dots-vertical"></i>
+									</button>
+									<ul class="dropdown-menu dropdown-menu-end rounded-3 shadow" style="min-width: 180px;">
+										<li><a class="dropdown-item d-flex" role="button" @click="configurationModals.peerSetting.modalOpen = true; configurationModalSelectedPeer = peer"><i class="me-auto bi bi-pen"></i> <LocaleText t="Peer Settings"></LocaleText></a></li>
+										<li><a class="dropdown-item d-flex" role="button" @click="configurationModals.peerScheduleJobs.modalOpen = true; configurationModalSelectedPeer = peer"><i class="me-auto bi bi-app-indicator"></i> <LocaleText t="Schedule Jobs"></LocaleText></a></li>
+										<li><hr class="dropdown-divider"></li>
+										<li><a class="dropdown-item d-flex text-warning" role="button" @click="tableRestrictPeer(peer)"><i class="me-auto bi bi-lock"></i> <LocaleText t="Restrict Access"></LocaleText></a></li>
+										<li><a class="dropdown-item d-flex text-danger fw-bold" role="button" @click="tableDeletePeer(peer)"><i class="me-auto bi bi-trash"></i> <LocaleText t="Delete"></LocaleText></a></li>
+									</ul>
+								</div>
 							</td>
 						</tr>
 					</tbody>
