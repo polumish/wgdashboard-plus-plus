@@ -331,16 +331,10 @@ watch(() => route.query.id, (newValue) => {
 
 <template>
 <div class="container-fluid" >
-	<div class="d-flex align-items-sm-start flex-column flex-sm-row gap-3">
-		<div>
-			<div class="text-muted d-flex align-items-center gap-2">
-				<h5 class="mb-0">
-					<ProtocolBadge :protocol="configurationInfo.Protocol"></ProtocolBadge>
-				</h5>
-			</div>
-			<div class="d-flex align-items-center gap-3">
-				<h1 class="mb-0 display-4"><samp>{{configurationInfo.Name}}</samp></h1>
-			</div>
+	<div class="d-flex align-items-sm-center flex-column flex-sm-row gap-2">
+		<div class="d-flex align-items-center gap-2">
+			<ProtocolBadge :protocol="configurationInfo.Protocol"></ProtocolBadge>
+			<h3 class="mb-0"><samp>{{configurationInfo.Name}}</samp></h3>
 		</div>
 		<div class="ms-sm-auto d-flex gap-2 flex-column">
 			<div class="card rounded-3 bg-transparent ">
@@ -554,7 +548,6 @@ watch(() => route.query.id, (newValue) => {
 						</td>
 						<td>
 							<strong class="d-block" style="font-size: 0.85rem">{{ peer.name || 'Untitled' }}</strong>
-							<samp class="text-muted" style="font-size: 0.65rem">{{ peer.id.substring(0, 20) }}...</samp>
 						</td>
 						<td><small><samp>{{ peer.allowed_ip }}</samp></small></td>
 						<td>

@@ -17,15 +17,15 @@
 
 /* Density: Compact */
 .density-compact {
-    --density-card-py: 0.25rem;
-    --density-card-px: 0.6rem;
-    --density-gap: 0.25rem;
-    --density-font: 0.8rem;
-    --density-font-sm: 0.7rem;
-    --density-nav-py: 0.15rem;
+    --density-card-py: 0.15rem;
+    --density-card-px: 0.5rem;
+    --density-gap: 0.15rem;
+    --density-font: 0.78rem;
+    --density-font-sm: 0.68rem;
+    --density-nav-py: 0.1rem;
     --density-nav-gap: 0;
-    --density-table-py: 0.2rem;
-    --density-row-gap: 0.25rem;
+    --density-table-py: 0.15rem;
+    --density-row-gap: 0.15rem;
 }
 
 /* Density: Comfortable */
@@ -84,6 +84,17 @@
 .density-compact .sidebar .nav.gap-1,
 .density-comfortable .sidebar .nav.gap-1 {
     gap: var(--density-nav-gap) !important;
+}
+
+.density-compact .row.gy-2,
+.density-compact .row.g-2,
+.density-compact .row.g-3 {
+    --bs-gutter-y: 0.25rem;
+}
+
+.density-compact .peerCard h6 {
+    font-size: 0.85rem;
+    margin-bottom: 0 !important;
 }
 
 .dp__input{

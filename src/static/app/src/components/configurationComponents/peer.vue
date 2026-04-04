@@ -87,14 +87,6 @@ export default {
 			     :class="[dashboardStore.Configuration.Server.dashboard_peer_list_display === 'grid' ? 'gap-1 flex-column' : 'flex-row gap-3']">
 				<div :class="{'d-flex gap-2 align-items-center' : dashboardStore.Configuration.Server.dashboard_peer_list_display === 'list'}">
 					<small class="text-muted">
-						<LocaleText t="Public Key"></LocaleText>
-					</small>
-					<small class="d-block">
-						<samp>{{Peer.id}}</samp>
-					</small>
-				</div>
-				<div :class="{'d-flex gap-2 align-items-center' : dashboardStore.Configuration.Server.dashboard_peer_list_display === 'list'}">
-					<small class="text-muted">
 						<LocaleText t="Allowed IPs"></LocaleText>
 					</small>
 					<small class="d-block">

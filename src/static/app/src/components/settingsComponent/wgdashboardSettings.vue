@@ -12,6 +12,7 @@ import AccountSettingsInputUsername from "@/components/settingsComponent/account
 import DashboardEmailSettings from "@/components/settingsComponent/dashboardEmailSettings.vue";
 import DashboardWebHooks from "@/components/settingsComponent/dashboardWebHooks.vue";
 import TrustedIPSettings from "@/components/settingsComponent/trustedIPSettings.vue";
+import DashboardDensity from "@/components/settingsComponent/dashboardDensity.vue";
 
 const dashboardConfigurationStore = DashboardConfigurationStore()
 
@@ -33,6 +34,9 @@ const dashboardConfigurationStore = DashboardConfigurationStore()
 					</div>
 					<div class="col-sm">
 						<DashboardLanguage></DashboardLanguage>
+					</div>
+					<div class="col-12 mt-2">
+						<DashboardDensity></DashboardDensity>
 					</div>
 				</div>
 			</div>
