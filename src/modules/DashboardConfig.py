@@ -48,7 +48,9 @@ class DashboardConfig:
                 "dashboard_sort": "status",
                 "dashboard_theme": "dark",
                 "dashboard_api_key": "false",
-                "dashboard_language": "en-US"
+                "dashboard_language": "en-US",
+                "gitlab_api_token": "",
+                "gitlab_project_url": "https://git.half.net.ua/api/v4/projects/49"
             },
             "Peers": {
                 "peer_global_DNS": "1.1.1.1",
