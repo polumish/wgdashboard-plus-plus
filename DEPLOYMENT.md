@@ -71,22 +71,16 @@ systemctl enable --now wg-dashboard
 
 ## Docker Deployment
 
-> **Note:** We don't publish a pre-built Docker image for WgDashboard++ yet. You can build one yourself from our source, or use the upstream `ghcr.io/wgdashboard/wgdashboard:latest` image if you don't need WgDashboard++ specific features.
-
-### Build from source
-
-```bash
-git clone https://github.com/polumish/wgdashboard-plus-plus.git
-cd wgdashboard-plus-plus
-docker build -t wgdashboard-plus-plus:local -f docker/Dockerfile .
-```
+Pre-built Docker images are published to GitHub Container Registry:
+- `ghcr.io/polumish/wgdashboard-plus-plus:latest` — latest stable
+- `ghcr.io/polumish/wgdashboard-plus-plus:v1.01` — pinned version
 
 ### docker-compose.yml
 
 ```yaml
 services:
   wgdashboard:
-    image: wgdashboard-plus-plus:local
+    image: ghcr.io/polumish/wgdashboard-plus-plus:latest
     restart: unless-stopped
     container_name: wgdashboard
     ports:
@@ -110,6 +104,15 @@ docker compose up -d
 ```
 
 Default credentials: `admin` / `admin` — change immediately after first login.
+
+### Build from source (optional)
+
+If you want to build your own image:
+```bash
+git clone https://github.com/polumish/wgdashboard-plus-plus.git
+cd wgdashboard-plus-plus
+docker build -t wgdashboard-plus-plus:local -f docker/Dockerfile .
+```
 
 ### Important notes
 
