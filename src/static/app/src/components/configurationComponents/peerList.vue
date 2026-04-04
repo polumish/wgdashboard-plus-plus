@@ -340,12 +340,12 @@ watch(() => route.query.id, (newValue) => {
 
 <template>
 <div class="container-fluid" >
-	<div class="d-flex align-items-sm-center flex-column flex-sm-row gap-2">
+	<div class="d-flex align-items-sm-center flex-column flex-sm-row gap-1">
 		<div class="d-flex align-items-center gap-2">
 			<ProtocolBadge :protocol="configurationInfo.Protocol"></ProtocolBadge>
-			<h3 class="mb-0"><samp>{{configurationInfo.Name}}</samp></h3>
+			<h4 class="mb-0"><samp>{{configurationInfo.Name}}</samp></h4>
 		</div>
-		<div class="ms-sm-auto d-flex gap-2 flex-column">
+		<div class="ms-sm-auto d-flex gap-1 flex-column">
 			<div class="card rounded-3 bg-transparent ">
 				<div class="card-body py-2 d-flex align-items-center">
 					<small class="text-muted">
