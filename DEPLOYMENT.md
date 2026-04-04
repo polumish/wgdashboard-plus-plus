@@ -69,6 +69,54 @@ systemctl daemon-reload
 systemctl enable --now wg-dashboard
 ```
 
+## Docker Deployment
+
+> **Note:** We don't publish a pre-built Docker image for WgDashboard++ yet. You can build one yourself from our source, or use the upstream `ghcr.io/wgdashboard/wgdashboard:latest` image if you don't need WgDashboard++ specific features.
+
+### Build from source
+
+```bash
+git clone https://github.com/polumish/wgdashboard-plus-plus.git
+cd wgdashboard-plus-plus
+docker build -t wgdashboard-plus-plus:local -f docker/Dockerfile .
+```
+
+### docker-compose.yml
+
+```yaml
+services:
+  wgdashboard:
+    image: wgdashboard-plus-plus:local
+    restart: unless-stopped
+    container_name: wgdashboard
+    ports:
+      - 10086:10086/tcp
+      - 51820:51820/udp
+      # Add more UDP ports here for each WireGuard interface you create
+    volumes:
+      - conf:/etc/wireguard
+      - data:/data
+    cap_add:
+      - NET_ADMIN
+
+volumes:
+  conf:
+  data:
+```
+
+Run with:
+```bash
+docker compose up -d
+```
+
+Default credentials: `admin` / `admin` — change immediately after first login.
+
+### Important notes
+
+- **UDP ports:** each WireGuard interface uses its own UDP port. Add new ports to `ports:` section when you create a new configuration in the dashboard.
+- **NET_ADMIN capability** is required for `wg-quick` to work.
+- **Persistent volumes** `conf` and `data` hold WireGuard configs and dashboard state — don't lose them.
+
 ## Reverse Proxy (optional)
 
 If exposing publicly, put behind nginx/caddy with TLS. Minimal nginx example:
