@@ -1,42 +1,36 @@
 ---
 name: Bug report
-about: Create a report to help us improve the project!
-title: ''
+about: Report something that doesn't work
+title: '[BUG] '
 labels: bug
 assignees: ''
-
 ---
 
-**Describe The Problem**
-A clear and concise description of what the bug is.
+## Describe the bug
+A clear description of what the bug is.
 
-**Expected Error / Traceback**
+## To Reproduce
+Steps to reproduce the behavior:
+1. Go to '...'
+2. Click on '...'
+3. See error
 
+## Expected behavior
+What you expected to happen.
+
+## Screenshots
+If applicable, add screenshots.
+
+## Environment
+- WgDashboard++ version: `v1.01`
+- Deployment: [Docker / bare metal / docker-compose]
+- OS: [Debian 12 / Ubuntu 22.04 / ...]
+- Browser: [Chrome 130 / Firefox 132 / Safari 18 / ...]
+
+## Logs
 ```
-Please provide the error traceback here
+paste relevant lines from error logs
 ```
 
-**To Reproduce**
-Please provide how you run the dashboard
-
-**OS Information:**
- - OS: [e.g. Ubuntu 18.02]
- - Docker: [e.g. Yes or No]
- - Python Version: [e.g v37]
-
-**Docker Details**
-If using docker, provide the following:
- - Image used: [e.g. ghcr.io/wgdashboard/wgdashboard:latest]
- - Compose: [e.g. Yes or No]
-If Docker Compose is used:
-
-```yaml
-**Your Docker Compose**
-```
-
-**Sample of your `.conf` file**
-
-```ini
-Please provide a sample of your configuration file that you are having problem with.
-You should replace your public key and private key to ABCD...
-```
+## Additional context
+Anything else that might help.
