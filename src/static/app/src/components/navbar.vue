@@ -63,7 +63,7 @@ export default {
 			<div class="sidebar-sticky ">
 				<div class="text-white text-center m-0 py-3 mb-2 btn-brand">
 					<h5 class="mb-0">
-						WGDashboard
+						WgDashboard ++
 					</h5>
 					<small class="ms-auto" v-if="getActiveCrossServer !== undefined">
 						<i class="bi bi-hdd-rack-fill me-2"></i>{{getActiveCrossServer.host}}

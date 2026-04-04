@@ -69,10 +69,8 @@
 }
 
 .btn-brand{
-    /*background: rgb(23,139,255);*/
-    background: linear-gradient(var(--degree), var(--brandColor1) var(--distance2), var(--brandColor2) 100%);
+    background: #343a40;
     border: 0 !important;
-    transition: --brandColor1 1s, --brandColor2 1s, --distance2 0.5s !important;
 }
 
 .btn-brand.loading{
