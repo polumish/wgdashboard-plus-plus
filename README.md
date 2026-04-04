@@ -30,6 +30,33 @@
 
 All credit for the base dashboard goes to the original author. This fork focuses on operational needs for managing multiple WireGuard networks with many peers and external clients.
 
+## Screenshots
+
+### Overview
+WireGuard configurations list on the home page.
+
+![Overview](docs/images/overview.png)
+
+### Dual-Column View
+Total Commander-style split view — peer list divided into two side-by-side tables.
+
+![Columns View](docs/images/columns-view.png)
+
+### Display Density
+Gmail-style density settings — Compact / Normal / Comfortable.
+
+![Density Settings](docs/images/density.png)
+
+### Compact Mode
+Fit more peers on screen with tight spacing.
+
+![Compact Mode](docs/images/sidebar-compact.png)
+
+### Login
+Custom branded login page.
+
+![Login](docs/images/login.png)
+
 ## Changes vs Upstream
 
 ### Client Features
