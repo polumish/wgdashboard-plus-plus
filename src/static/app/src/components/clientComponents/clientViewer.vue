@@ -116,9 +116,7 @@ const deleteSuccess = async () => {
 				@refresh="getAssignedPeers()"
 				:clientAssignedPeers="clientAssignedPeers"
 				:client="client"></ClientAssignedPeers>
-			<Suspense>
-				<ClientConfigAccess :client="client"></ClientConfigAccess>
-			</Suspense>
+			<ClientConfigAccess :client="client"></ClientConfigAccess>
 <!--			<ClientResetPassword-->
 <!--				:client="client" v-if="client.ClientGroup === 'Local'"></ClientResetPassword>-->
 			<ClientDelete

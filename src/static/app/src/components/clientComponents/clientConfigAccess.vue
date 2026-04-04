@@ -1,5 +1,5 @@
-<script setup async>
-import {ref, computed} from "vue";
+<script setup>
+import {ref, computed, onMounted, watch} from "vue";
 import {fetchGet, fetchPost} from "@/utilities/fetch.js";
 import {DashboardConfigurationStore} from "@/stores/DashboardConfigurationStore.js";
 import {WireguardConfigurationsStore} from "@/stores/WireguardConfigurationsStore.js";
@@ -16,6 +16,7 @@ const selectedConfig = ref('')
 const selectedRole = ref('manager')
 
 const loadAccesses = async () => {
+	loading.value = true
 	await fetchGet('/api/clients/getConfigAccess', {
 		ClientID: props.client.ClientID
 	}, (res) => {
@@ -23,10 +24,11 @@ const loadAccesses = async () => {
 			accesses.value = res.data || []
 		}
 	})
+	loading.value = false
 }
 
-await loadAccesses()
-loading.value = false
+onMounted(() => loadAccesses())
+watch(() => props.client?.ClientID, () => loadAccesses())
 
 const availableConfigs = computed(() => {
 	const grantedNames = accesses.value.map(a => a.ConfigurationName)
