@@ -10,7 +10,7 @@ const formData = reactive({
 	Email: "",
 	Password: ""
 });
-const emits = defineEmits(['totpToken'])
+const emits = defineEmits(['totpToken', 'trustedLogin'])
 
 const totpToken = ref("")
 const store = clientStore()
@@ -27,7 +27,11 @@ const signIn = async (e) => {
 		store.newNotification(data.message, "danger")
 		loading.value = false;
 	}else{
-		emits("totpToken", data.message)
+		if (data.data && data.data.TrustedIP) {
+			emits("trustedLogin")
+		} else {
+			emits("totpToken", data.message)
+		}
 	}
 }
 

@@ -25,6 +25,25 @@ def ResponseObject(status=True, message=None, data=None, status_code = 200) -> F
 
 
 from modules.DashboardClients import DashboardClients
+import ipaddress as _ipaddress
+
+def _is_trusted_ip(dashboardConfig):
+    clientIP = request.headers.get("X-Forwarded-For", request.remote_addr)
+    if clientIP:
+        clientIP = clientIP.split(",")[0].strip()
+    trustedIPs = dashboardConfig.GetConfig("Security", "trusted_ips")[1]
+    if trustedIPs and clientIP:
+        for tip in trustedIPs.split(","):
+            tip = tip.strip()
+            if not tip:
+                continue
+            try:
+                if _ipaddress.ip_address(clientIP) in _ipaddress.ip_network(tip, strict=False):
+                    return True
+            except ValueError:
+                pass
+    return False
+
 def createClientBlueprint(wireguardConfigurations: dict[WireguardConfiguration], dashboardConfig: DashboardConfig, dashboardClients: DashboardClients):
         
     client = Blueprint('client', __name__, template_folder=os.path.abspath("./static/dist/WGDashboardClient"))
@@ -89,7 +108,16 @@ def createClientBlueprint(wireguardConfigurations: dict[WireguardConfiguration],
         if status:
             session['Email'] = data.get('Email')
             session['Role'] = 'client'
-            session['TotpVerified'] = False
+            if _is_trusted_ip(dashboardConfig):
+                session['TotpVerified'] = True
+                profile = dashboardClients.GetClientProfile(session.get("ClientID"))
+                return ResponseObject(True, data={
+                    "TrustedIP": True,
+                    "Email": session.get('Email'),
+                    "Profile": profile
+                })
+            else:
+                session['TotpVerified'] = False
         return ResponseObject(status, msg)
 
     @client.post(f'{prefix}/api/resetPassword/generateResetToken')
@@ -313,10 +341,10 @@ def createClientBlueprint(wireguardConfigurations: dict[WireguardConfiguration],
             "private_key": private_key,
             "allowed_ip": assigned_ip,
             "name": data.get('name', ''),
-            "DNS": data.get('DNS', wc.DefaultDNS),
-            "endpoint_allowed_ip": data.get('endpoint_allowed_ip', wc.DefaultEndpointAllowedIp),
-            "mtu": data.get('mtu', wc.DefaultMTU),
-            "keepalive": data.get('keepalive', wc.DefaultKeepAlive),
+            "DNS": data.get('DNS', dashboardConfig.GetConfig("Peers", "peer_global_DNS")[1]),
+            "endpoint_allowed_ip": data.get('endpoint_allowed_ip', dashboardConfig.GetConfig("Peers", "peer_endpoint_allowed_ip")[1]),
+            "mtu": data.get('mtu', dashboardConfig.GetConfig("Peers", "peer_MTU")[1]),
+            "keepalive": data.get('keepalive', dashboardConfig.GetConfig("Peers", "peer_keep_alive")[1]),
             "preshared_key": data.get('preshared_key', ''),
             "advanced_security": "off",
         }

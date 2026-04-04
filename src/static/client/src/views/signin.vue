@@ -12,6 +12,7 @@ const checkTotp = ref("")
 		<Transition name="app" mode="out-in">
 			<SignInForm
 				@totpToken="token => { checkTotp = token }"
+				@trustedLogin="$router.push('/')"
 				v-if="!checkTotp"></SignInForm>
 			<TotpForm
 				@clearToken="checkTotp = ''"
