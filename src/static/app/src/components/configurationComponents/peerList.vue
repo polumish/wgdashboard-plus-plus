@@ -1,7 +1,7 @@
 <script setup async>
 import {computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch} from "vue";
 import {useRoute} from "vue-router";
-import {fetchGet} from "@/utilities/fetch.js";
+import {fetchGet, fetchPost} from "@/utilities/fetch.js";
 import ProtocolBadge from "@/components/protocolBadge.vue";
 import LocaleText from "@/components/text/localeText.vue";
 import {DashboardConfigurationStore} from "@/stores/DashboardConfigurationStore.js";
@@ -9,7 +9,6 @@ import {WireguardConfigurationsStore} from "@/stores/WireguardConfigurationsStor
 import PeerDataUsageCharts from "@/components/configurationComponents/peerListComponents/peerDataUsageCharts.vue";
 import PeerSearch from "@/components/configurationComponents/peerSearch.vue";
 import Peer from "@/components/configurationComponents/peer.vue";
-import PeerSettingsDropdown from "@/components/configurationComponents/peerSettingsDropdown.vue";
 import PeerListModals from "@/components/configurationComponents/peerListComponents/peerListModals.vue";
 import PeerIntersectionObserver from "@/components/configurationComponents/peerIntersectionObserver.vue";
 import ConfigurationDescription from "@/components/configurationComponents/configurationDescription.vue";
@@ -266,6 +265,45 @@ const tableSortedPeers = computed(() => {
 	})
 })
 
+const tableDownloadPeer = (peer) => {
+	fetchGet("/api/downloadPeer/" + route.params.id, { id: peer.id }, (res) => {
+		if (res.status) {
+			const blob = new Blob([res.data.file], { type: "text/conf" })
+			const url = URL.createObjectURL(blob)
+			const a = document.createElement("a")
+			a.href = url
+			a.download = `${res.data.fileName}.conf`
+			a.click()
+			dashboardStore.newMessage("WGDashboard", "Peer download started", "success")
+		} else {
+			dashboardStore.newMessage("Server", res.message, "danger")
+		}
+	})
+}
+
+const tableDeletePeer = (peer) => {
+	if (!confirm("Are you sure to delete this peer?")) return
+	fetchPost(`/api/deletePeers/${route.params.id}`, { peers: [peer.id] }, (res) => {
+		dashboardStore.newMessage("Server", res.message, res.status ? "success" : "danger")
+		fetchPeerList()
+	})
+}
+
+const tableRestrictPeer = (peer) => {
+	fetchPost(`/api/restrictPeers/${route.params.id}`, { peers: [peer.id] }, (res) => {
+		dashboardStore.newMessage("Server", res.message, res.status ? "success" : "danger")
+		fetchPeerList()
+	})
+}
+
+const tableBroadcastAllowedIPs = (peer) => {
+	if (!confirm(`Broadcast this peer's AllowedIPs (${peer.allowed_ip}) to all other peers?`)) return
+	fetchPost(`/api/broadcastPeerAllowedIPs/${route.params.id}`, { id: peer.id }, (res) => {
+		dashboardStore.newMessage("Server", res.message, res.status ? "success" : "danger")
+		fetchPeerList()
+	})
+}
+
 watch(() => route.query.id, (newValue) => {
 	if (newValue){
 		wireguardConfigurationStore.searchString = newValue
@@ -501,21 +539,30 @@ watch(() => route.query.id, (newValue) => {
 						<td><small class="text-muted"><samp>{{ peer.endpoint }}</samp></small></td>
 						<td @click.stop class="position-relative">
 							<div class="dropdown">
-								<button class="btn btn-sm btn-body rounded-3" data-bs-toggle="dropdown"
-										@click="configurationModalSelectedPeer = peer">
+								<button class="btn btn-sm btn-body rounded-3" data-bs-toggle="dropdown">
 									<i class="bi bi-three-dots-vertical"></i>
 								</button>
-								<PeerSettingsDropdown
-									:Peer="peer"
-									:ConfigurationInfo="configurationInfo"
-									@setting="configurationModals.peerSetting.modalOpen = true; configurationModalSelectedPeer = peer"
-									@qrcode="configurationModalSelectedPeer = peer; configurationModals.peerQRCode.modalOpen = true"
-									@configurationFile="configurationModalSelectedPeer = peer; configurationModals.peerConfigurationFile.modalOpen = true"
-									@share="configurationModals.peerShare.modalOpen = true; configurationModalSelectedPeer = peer"
-									@jobs="configurationModals.peerScheduleJobs.modalOpen = true; configurationModalSelectedPeer = peer"
-									@assign="configurationModalSelectedPeer = peer; configurationModals.assignPeer.modalOpen = true"
-									@refresh="fetchPeerList()"
-								></PeerSettingsDropdown>
+								<ul class="dropdown-menu dropdown-menu-end rounded-3 shadow" style="min-width: 200px">
+									<template v-if="peer.private_key">
+										<li class="d-flex px-2 gap-1">
+											<button class="btn btn-sm btn-body rounded-3 flex-fill" title="Download" @click="tableDownloadPeer(peer)"><i class="bi bi-download"></i></button>
+											<button class="btn btn-sm btn-body rounded-3 flex-fill" title="QR Code" @click="configurationModalSelectedPeer = peer; configurationModals.peerQRCode.modalOpen = true"><i class="bi bi-qr-code"></i></button>
+											<button class="btn btn-sm btn-body rounded-3 flex-fill" title="Config File" @click="configurationModalSelectedPeer = peer; configurationModals.peerConfigurationFile.modalOpen = true"><i class="bi bi-body-text"></i></button>
+											<button class="btn btn-sm btn-body rounded-3 flex-fill" title="Share" @click="configurationModals.peerShare.modalOpen = true; configurationModalSelectedPeer = peer"><i class="bi bi-share"></i></button>
+										</li>
+										<li><hr class="dropdown-divider"></li>
+									</template>
+									<template v-else>
+										<li><small class="dropdown-item text-muted" style="white-space: break-spaces; font-size: 0.7rem"><LocaleText t="Download & QR Code is not available due to no private key set for this peer"></LocaleText></small></li>
+									</template>
+									<li><a class="dropdown-item d-flex" role="button" @click="configurationModals.peerSetting.modalOpen = true; configurationModalSelectedPeer = peer"><i class="me-auto bi bi-pen"></i> <LocaleText t="Peer Settings"></LocaleText></a></li>
+									<li><a class="dropdown-item d-flex" role="button" @click="configurationModals.peerScheduleJobs.modalOpen = true; configurationModalSelectedPeer = peer"><i class="me-auto bi bi-app-indicator"></i> <LocaleText t="Schedule Jobs"></LocaleText></a></li>
+									<li><a class="dropdown-item d-flex" role="button" @click="configurationModalSelectedPeer = peer; configurationModals.assignPeer.modalOpen = true"><i class="me-auto bi bi-diagram-2"></i> <LocaleText t="Assign Peer"></LocaleText></a></li>
+									<li><a class="dropdown-item d-flex" role="button" @click="tableBroadcastAllowedIPs(peer)"><i class="me-auto bi bi-broadcast"></i> <LocaleText t="Broadcast AllowedIPs"></LocaleText></a></li>
+									<li><hr class="dropdown-divider"></li>
+									<li><a class="dropdown-item d-flex text-warning" role="button" @click="tableRestrictPeer(peer)"><i class="me-auto bi bi-lock"></i> <LocaleText t="Restrict Access"></LocaleText></a></li>
+									<li><a class="dropdown-item d-flex text-danger fw-bold" role="button" @click="tableDeletePeer(peer)"><i class="me-auto bi bi-trash"></i> <LocaleText t="Delete"></LocaleText></a></li>
+								</ul>
 							</div>
 						</td>
 					</tr>
