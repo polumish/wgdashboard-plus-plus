@@ -39,6 +39,11 @@ export default {
 				grid: GetLocale('Grid'),
 				list: GetLocale('List')
 			},
+			density: {
+				compact: 'Compact',
+				normal: 'Normal',
+				comfortable: 'Comfortable'
+			},
 			searchString: "",
 			searchStringTimeout: undefined,
 			showDisplaySettings: false,
@@ -78,7 +83,18 @@ export default {
 				if (res.status){
 					this.store.getConfiguration();
 				}
-			})	
+			})
+		},
+		updateDensity(density){
+			fetchPost("/api/updateDashboardConfigurationItem", {
+				section: "Server",
+				key: "dashboard_density",
+				value: density
+			}, (res) => {
+				if (res.status){
+					this.store.getConfiguration();
+				}
+			})
 		},
 		downloadAllPeer(){
 			fetchGet(`/api/downloadAllPeers/${this.configuration.Name}`, {}, (res) => {
@@ -156,6 +172,28 @@ export default {
 							<small class="ms-auto">
 								<i class="bi bi-check-circle-fill"
 								   v-if="store.Configuration.Server.dashboard_peer_list_display === key"></i>
+							</small>
+						</button>
+					</li>
+				</ul>
+			</div>
+			<div class="dropdown">
+				<button
+					data-bs-toggle="dropdown"
+					class="btn btn-sm w-100 text-primary-emphasis bg-primary-subtle rounded-3 border-1 border-primary-subtle position-relative">
+					<i class="bi bi-distribute-vertical me-2"></i>
+					<LocaleText t="Density"></LocaleText>
+					<span class="badge text-bg-primary ms-2">{{this.density[store.Configuration.Server.dashboard_density] || 'Normal'}}</span>
+				</button>
+				<ul class="dropdown-menu rounded-3">
+					<li v-for="(value, key) in this.density">
+						<button class="dropdown-item d-flex align-items-center" @click="this.updateDensity(key)">
+							<small>
+								{{ value }}
+							</small>
+							<small class="ms-auto">
+								<i class="bi bi-check-circle-fill"
+								   v-if="store.Configuration.Server.dashboard_density === key"></i>
 							</small>
 						</button>
 					</li>

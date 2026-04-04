@@ -44,6 +44,7 @@ class DashboardConfig:
                 "version": DashboardConfig.DashboardVersion,
                 "dashboard_refresh_interval": "60000",
                 "dashboard_peer_list_display": "grid",
+                "dashboard_density": "normal",
                 "dashboard_sort": "status",
                 "dashboard_theme": "dark",
                 "dashboard_api_key": "false",

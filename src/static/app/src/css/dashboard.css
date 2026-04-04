@@ -2,6 +2,90 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 }
 
+/* Density: Normal (default) */
+.density-normal {
+    --density-card-py: 0.75rem;
+    --density-card-px: 1rem;
+    --density-gap: 0.5rem;
+    --density-font: 0.9rem;
+    --density-font-sm: 0.8rem;
+    --density-nav-py: 0.5rem;
+    --density-nav-gap: 0.25rem;
+    --density-table-py: 0.5rem;
+    --density-row-gap: 0.5rem;
+}
+
+/* Density: Compact */
+.density-compact {
+    --density-card-py: 0.25rem;
+    --density-card-px: 0.6rem;
+    --density-gap: 0.25rem;
+    --density-font: 0.8rem;
+    --density-font-sm: 0.7rem;
+    --density-nav-py: 0.15rem;
+    --density-nav-gap: 0;
+    --density-table-py: 0.2rem;
+    --density-row-gap: 0.25rem;
+}
+
+/* Density: Comfortable */
+.density-comfortable {
+    --density-card-py: 1rem;
+    --density-card-px: 1.25rem;
+    --density-gap: 0.75rem;
+    --density-font: 1rem;
+    --density-font-sm: 0.85rem;
+    --density-nav-py: 0.6rem;
+    --density-nav-gap: 0.35rem;
+    --density-table-py: 0.75rem;
+    --density-row-gap: 0.75rem;
+}
+
+/* Density overrides for components */
+.density-compact .peerCard .card-header,
+.density-comfortable .peerCard .card-header {
+    padding: var(--density-card-py) var(--density-card-px);
+    font-size: var(--density-font-sm);
+}
+
+.density-compact .peerCard .card-body,
+.density-comfortable .peerCard .card-body {
+    padding: var(--density-card-py) var(--density-card-px);
+    font-size: var(--density-font);
+}
+
+.density-compact .peerCard .card-footer,
+.density-comfortable .peerCard .card-footer {
+    padding: var(--density-card-py) var(--density-card-px);
+    font-size: var(--density-font-sm);
+}
+
+.density-compact .conf_card .card-body,
+.density-comfortable .conf_card .card-body {
+    padding: var(--density-card-py) var(--density-card-px);
+}
+
+.density-compact .conf_card .card-footer,
+.density-comfortable .conf_card .card-footer {
+    padding: var(--density-card-py) var(--density-card-px);
+    font-size: var(--density-font-sm);
+}
+
+.density-compact .table > :not(caption) > * > *,
+.density-comfortable .table > :not(caption) > * > * {
+    padding: var(--density-table-py) var(--density-card-px);
+}
+
+.density-compact .sidebar .nav-link,
+.density-comfortable .sidebar .nav-link {
+    padding: var(--density-nav-py) 0.5rem;
+}
+
+.density-compact .sidebar .nav.gap-1,
+.density-comfortable .sidebar .nav.gap-1 {
+    gap: var(--density-nav-gap) !important;
+}
+
 .dp__input{
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol" !important;
 }

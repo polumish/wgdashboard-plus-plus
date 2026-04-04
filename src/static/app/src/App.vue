@@ -29,7 +29,7 @@ const route = useRoute()
 </script>
 
 <template>
-	<div class="h-100 bg-body" :data-bs-theme="store.Configuration?.Server.dashboard_theme">
+	<div class="h-100 bg-body" :data-bs-theme="store.Configuration?.Server.dashboard_theme" :class="'density-' + (store.Configuration?.Server.dashboard_density || 'normal')">
 		<div style="z-index: 9999; height: 5px" class="position-absolute loadingBar top-0 start-0"></div>
 		<nav class="navbar bg-dark sticky-top" data-bs-theme="dark" v-if="!route.meta.hideTopNav">
 			<div class="container-fluid d-flex text-body align-items-center">
