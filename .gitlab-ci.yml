@@ -2,6 +2,7 @@ stages:
   - test
   - deploy
   - mirror
+  - upstream-watch
 
 test:
   stage: test
@@ -63,4 +64,16 @@ mirror-github:
     - git push github main --force
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
+  allow_failure: true
+
+upstream-watch:
+  stage: upstream-watch
+  tags:
+    - wgdashboard
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - python3 /opt/WGDashboard/scripts/check_upstream.py
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
   allow_failure: true
