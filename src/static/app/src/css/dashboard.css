@@ -112,6 +112,13 @@
     transition: 0.2s cubic-bezier(0.82, -0.07, 0, 1);
 }
 
+.sidebar .nav-conf-link {
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: left;
+}
+
 [data-bs-theme="dark"] .sidebar .nav-link{
     color: white;
 }
