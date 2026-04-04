@@ -9,6 +9,7 @@ import {WireguardConfigurationsStore} from "@/stores/WireguardConfigurationsStor
 import PeerDataUsageCharts from "@/components/configurationComponents/peerListComponents/peerDataUsageCharts.vue";
 import PeerSearch from "@/components/configurationComponents/peerSearch.vue";
 import Peer from "@/components/configurationComponents/peer.vue";
+import PeerSettingsDropdown from "@/components/configurationComponents/peerSettingsDropdown.vue";
 import PeerListModals from "@/components/configurationComponents/peerListComponents/peerListModals.vue";
 import PeerIntersectionObserver from "@/components/configurationComponents/peerIntersectionObserver.vue";
 import ConfigurationDescription from "@/components/configurationComponents/configurationDescription.vue";
@@ -498,16 +499,23 @@ watch(() => route.query.id, (newValue) => {
 						</td>
 						<td><small class="text-muted">{{ peer.latest_handshake }}</small></td>
 						<td><small class="text-muted"><samp>{{ peer.endpoint }}</samp></small></td>
-						<td @click.stop>
+						<td @click.stop class="position-relative">
 							<div class="dropdown">
-								<button class="btn btn-sm btn-body rounded-3" data-bs-toggle="dropdown">
+								<button class="btn btn-sm btn-body rounded-3" data-bs-toggle="dropdown"
+										@click="configurationModalSelectedPeer = peer">
 									<i class="bi bi-three-dots-vertical"></i>
 								</button>
-								<ul class="dropdown-menu dropdown-menu-end rounded-3 shadow">
-									<li><a class="dropdown-item" role="button" @click="configurationModals.peerSetting.modalOpen = true; configurationModalSelectedPeer = peer"><i class="bi bi-pen me-2"></i><LocaleText t="Settings"></LocaleText></a></li>
-									<li v-if="peer.private_key"><a class="dropdown-item" role="button" @click="configurationModalSelectedPeer = peer; configurationModals.peerQRCode.modalOpen = true"><i class="bi bi-qr-code me-2"></i><LocaleText t="QR Code"></LocaleText></a></li>
-									<li><a class="dropdown-item" role="button" @click="configurationModalSelectedPeer = peer; configurationModals.assignPeer.modalOpen = true"><i class="bi bi-diagram-2 me-2"></i><LocaleText t="Assign"></LocaleText></a></li>
-								</ul>
+								<PeerSettingsDropdown
+									:Peer="peer"
+									:ConfigurationInfo="configurationInfo"
+									@setting="configurationModals.peerSetting.modalOpen = true; configurationModalSelectedPeer = peer"
+									@qrcode="configurationModalSelectedPeer = peer; configurationModals.peerQRCode.modalOpen = true"
+									@configurationFile="configurationModalSelectedPeer = peer; configurationModals.peerConfigurationFile.modalOpen = true"
+									@share="configurationModals.peerShare.modalOpen = true; configurationModalSelectedPeer = peer"
+									@jobs="configurationModals.peerScheduleJobs.modalOpen = true; configurationModalSelectedPeer = peer"
+									@assign="configurationModalSelectedPeer = peer; configurationModals.assignPeer.modalOpen = true"
+									@refresh="fetchPeerList()"
+								></PeerSettingsDropdown>
 							</div>
 						</td>
 					</tr>
