@@ -194,7 +194,9 @@ def createClientBlueprint(wireguardConfigurations: dict[WireguardConfiguration],
     
     @client.get(prefix)
     def ClientIndex():
-        return render_template('client.html')
+        resp = Flask.make_response(current_app, render_template('client.html'))
+        resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return resp
     
     @client.get(f'{prefix}/api/serverInformation')
     def ClientAPI_ServerInformation():

@@ -1374,8 +1374,23 @@ Sign Up
 
 @app.get(f'{APP_PREFIX}/api/isTotpEnabled')
 def API_isTotpEnabled():
-    return (
-        ResponseObject(data=DashboardConfig.GetConfig("Account", "enable_totp")[1] and DashboardConfig.GetConfig("Account", "totp_verified")[1]))
+    totpEnabled = DashboardConfig.GetConfig("Account", "enable_totp")[1] and DashboardConfig.GetConfig("Account", "totp_verified")[1]
+    if totpEnabled:
+        clientIP = request.headers.get("X-Forwarded-For", request.remote_addr)
+        if clientIP:
+            clientIP = clientIP.split(",")[0].strip()
+        trustedIPs = DashboardConfig.GetConfig("Security", "trusted_ips")[1]
+        if trustedIPs and clientIP:
+            for tip in trustedIPs.split(","):
+                tip = tip.strip()
+                if not tip:
+                    continue
+                try:
+                    if ipaddress.ip_address(clientIP) in ipaddress.ip_network(tip, strict=False):
+                        return ResponseObject(data=False)
+                except ValueError:
+                    pass
+    return ResponseObject(data=totpEnabled)
 
 
 @app.get(f'{APP_PREFIX}/api/Welcome_GetTotpLink')
@@ -1747,7 +1762,9 @@ Index Page
 
 @app.get(f'{APP_PREFIX}/')
 def index():
-    return render_template('index.html')
+    resp = Flask.make_response(app, render_template('index.html'))
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
 
 if __name__ == "__main__":
     startThreads()
