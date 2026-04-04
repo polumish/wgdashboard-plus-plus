@@ -31,7 +31,7 @@ const configurationInfo = ref({})
 const configurationPeers = ref([])
 const configurationToggling = ref(false)
 const configurationModalSelectedPeer = ref({})
-const tableSortBy = ref('name')
+const tableSortBy = ref('status')
 const tableSortAsc = ref(true)
 const configInfoExpanded = ref(false)
 const configurationModals = ref({
@@ -244,18 +244,31 @@ const searchPeers = computed(() => {
 	return re
 })
 
+const _handshakeToTimestamp = (hs) => {
+	if (!hs || hs === 'No Handshake' || hs === 'N/A') return 0
+	const d = new Date(hs)
+	return isNaN(d.getTime()) ? 0 : d.getTime()
+}
+
 const tableSortedPeers = computed(() => {
 	const peers = [...searchPeers.value]
 	const key = tableSortBy.value
 	const asc = tableSortAsc.value
 	return peers.sort((a, b) => {
 		let va, vb
-		if (key === 'total_data') {
+		if (key === 'status') {
+			const aOnline = a.status === 'running' ? 1 : 0
+			const bOnline = b.status === 'running' ? 1 : 0
+			if (aOnline !== bOnline) return asc ? bOnline - aOnline : aOnline - bOnline
+			const aTs = _handshakeToTimestamp(a.latest_handshake)
+			const bTs = _handshakeToTimestamp(b.latest_handshake)
+			return asc ? bTs - aTs : aTs - bTs
+		} else if (key === 'total_data') {
 			va = (a.cumu_receive + a.total_receive + a.cumu_sent + a.total_sent)
 			vb = (b.cumu_receive + b.total_receive + b.cumu_sent + b.total_sent)
 		} else if (key === 'latest_handshake') {
-			va = a.latest_handshake === 'No Handshake' ? '' : a.latest_handshake
-			vb = b.latest_handshake === 'No Handshake' ? '' : b.latest_handshake
+			va = _handshakeToTimestamp(a.latest_handshake)
+			vb = _handshakeToTimestamp(b.latest_handshake)
 		} else {
 			va = a[key] || ''
 			vb = b[key] || ''
@@ -496,7 +509,12 @@ watch(() => route.query.id, (newValue) => {
 			<table class="table table-hover align-middle mb-0">
 				<thead class="table-light">
 					<tr>
-						<th style="width: 30px"></th>
+						<th style="min-width: 80px" role="button" @click="tableSortBy = 'status'; tableSortAsc = tableSortBy === 'status' ? !tableSortAsc : true" title="Sort by status">
+							<small class="d-flex align-items-center gap-1">
+								<LocaleText t="Status"></LocaleText>
+								<i class="bi" :class="tableSortBy === 'status' ? (tableSortAsc ? 'bi-sort-up' : 'bi-sort-down') : 'bi-sort-up text-muted opacity-25'" style="font-size: 0.7rem"></i>
+							</small>
+						</th>
 						<th role="button" @click="tableSortBy = 'name'; tableSortAsc = tableSortBy === 'name' ? !tableSortAsc : true">
 							<small class="d-flex align-items-center gap-1">
 								<LocaleText t="Name"></LocaleText>
@@ -512,13 +530,7 @@ watch(() => route.query.id, (newValue) => {
 								<i class="bi" :class="tableSortBy === 'total_data' ? (tableSortAsc ? 'bi-sort-up' : 'bi-sort-down') : 'bi-sort-up text-muted opacity-25'" style="font-size: 0.7rem"></i>
 							</small>
 						</th>
-						<th role="button" @click="tableSortBy = 'latest_handshake'; tableSortAsc = tableSortBy === 'latest_handshake' ? !tableSortAsc : false">
-							<small class="d-flex align-items-center gap-1">
-								<LocaleText t="Handshake"></LocaleText>
-								<i class="bi" :class="tableSortBy === 'latest_handshake' ? (tableSortAsc ? 'bi-sort-up' : 'bi-sort-down') : 'bi-sort-up text-muted opacity-25'" style="font-size: 0.7rem"></i>
-							</small>
-						</th>
-						<th><small><LocaleText t="Endpoint"></LocaleText></small></th>
+							<th><small><LocaleText t="Endpoint"></LocaleText></small></th>
 						<th style="width: 40px"></th>
 					</tr>
 				</thead>
@@ -528,9 +540,15 @@ watch(() => route.query.id, (newValue) => {
 						role="button"
 						@click="configurationModals.peerSetting.modalOpen = true; configurationModalSelectedPeer = peer">
 						<td>
-							<span class="d-inline-block rounded-circle"
-								  :style="{width: '10px', height: '10px', backgroundColor: peer.status === 'running' ? '#28a745' : '#6c757d', boxShadow: peer.status === 'running' ? '0 0 0 3px #28a74545' : 'none'}">
-							</span>
+							<div class="d-flex align-items-center gap-1">
+								<span class="d-inline-block rounded-circle flex-shrink-0"
+									  :style="{width: '10px', height: '10px', backgroundColor: peer.status === 'running' ? '#28a745' : '#6c757d', boxShadow: peer.status === 'running' ? '0 0 0 3px #28a74545' : 'none'}">
+								</span>
+								<small class="text-muted" style="font-size: 0.7rem; white-space: nowrap;"
+									   v-if="peer.latest_handshake && peer.latest_handshake !== 'No Handshake'">
+									{{ peer.latest_handshake }}
+								</small>
+							</div>
 						</td>
 						<td>
 							<strong class="d-block" style="font-size: 0.85rem">{{ peer.name || 'Untitled' }}</strong>
@@ -543,7 +561,6 @@ watch(() => route.query.id, (newValue) => {
 								<span><i class="bi bi-arrow-up text-primary me-1"></i>{{ (peer.cumu_sent + peer.total_sent).toFixed(2) }} GB</span>
 							</small>
 						</td>
-						<td><small class="text-muted">{{ peer.latest_handshake }}</small></td>
 						<td><small class="text-muted"><samp>{{ peer.endpoint }}</samp></small></td>
 						<td @click.stop class="position-relative">
 							<div class="dropup dropstart">
