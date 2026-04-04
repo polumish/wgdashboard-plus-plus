@@ -109,7 +109,7 @@ export default {
 					<LocaleText t="WireGuard Configurations"></LocaleText>
 				</h6>
 				<ul class="nav flex-column px-2 gap-1">
-					<li class="nav-item" v-for="c in this.wireguardConfigurationsStore.sortConfigurations">
+					<li class="nav-item nav-conf-zebra" v-for="c in this.wireguardConfigurationsStore.sortConfigurations">
 						<RouterLink :to="'/configuration/'+c.Name + '/peers'" class="nav-link rounded-3"
 						            active-class="active"
 						            style="display: grid !important; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.5rem;"
@@ -245,5 +245,21 @@ export default {
 	align-items: center !important;
 	justify-content: flex-start !important;
 	text-align: left !important;
+}
+
+.nav-conf-zebra:nth-child(even) .nav-link {
+	background-color: rgba(0, 0, 0, 0.025);
+}
+
+.nav-conf-zebra .nav-link:hover {
+	background-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+:deep([data-bs-theme="dark"]) .nav-conf-zebra:nth-child(even) .nav-link {
+	background-color: rgba(255, 255, 255, 0.04);
+}
+
+:deep([data-bs-theme="dark"]) .nav-conf-zebra .nav-link:hover {
+	background-color: rgba(255, 255, 255, 0.08) !important;
 }
 </style>
