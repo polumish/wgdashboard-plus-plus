@@ -1,6 +1,7 @@
 stages:
   - test
   - deploy
+  - mirror
 
 test:
   stage: test
@@ -48,3 +49,16 @@ deploy:
   environment:
     name: production
     url: https://dashboard.net.half.net.ua
+
+mirror-github:
+  stage: mirror
+  tags:
+    - wgdashboard
+  script:
+    - cd "$CI_PROJECT_DIR"
+    - git remote remove github 2>/dev/null || true
+    - git remote add github "https://polumish:${GITHUB_TOKEN}@github.com/polumish/wgdashboard-plus-plus.git"
+    - git push github main --force
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  allow_failure: true
