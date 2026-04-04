@@ -31,6 +31,8 @@ const configurationInfo = ref({})
 const configurationPeers = ref([])
 const configurationToggling = ref(false)
 const configurationModalSelectedPeer = ref({})
+const tableSortBy = ref('name')
+const tableSortAsc = ref(true)
 const configurationModals = ref({
 	peerNew: {
 		modalOpen: false
@@ -241,6 +243,28 @@ const searchPeers = computed(() => {
 	return re
 })
 
+const tableSortedPeers = computed(() => {
+	const peers = [...searchPeers.value]
+	const key = tableSortBy.value
+	const asc = tableSortAsc.value
+	return peers.sort((a, b) => {
+		let va, vb
+		if (key === 'total_data') {
+			va = (a.cumu_receive + a.total_receive + a.cumu_sent + a.total_sent)
+			vb = (b.cumu_receive + b.total_receive + b.cumu_sent + b.total_sent)
+		} else if (key === 'latest_handshake') {
+			va = a.latest_handshake === 'No Handshake' ? '' : a.latest_handshake
+			vb = b.latest_handshake === 'No Handshake' ? '' : b.latest_handshake
+		} else {
+			va = a[key] || ''
+			vb = b[key] || ''
+		}
+		if (va < vb) return asc ? -1 : 1
+		if (va > vb) return asc ? 1 : -1
+		return 0
+	})
+})
+
 watch(() => route.query.id, (newValue) => {
 	if (newValue){
 		wireguardConfigurationStore.searchString = newValue
@@ -420,7 +444,78 @@ watch(() => route.query.id, (newValue) => {
 			@deleteConfiguration="configurationModals.deleteConfiguration.modalOpen = true"
 			:configuration="configurationInfo">
 		</PeerSearch>
-		<TransitionGroup name="peerList" tag="div" class="row gx-2 gy-2 z-0 position-relative">
+		<!-- Table View -->
+		<div v-if="dashboardStore.Configuration.Server.dashboard_peer_list_display === 'table'" class="table-responsive">
+			<table class="table table-hover align-middle mb-0">
+				<thead class="table-light">
+					<tr>
+						<th style="width: 30px"></th>
+						<th role="button" @click="tableSortBy = 'name'; tableSortAsc = tableSortBy === 'name' ? !tableSortAsc : true">
+							<small class="d-flex align-items-center gap-1">
+								<LocaleText t="Name"></LocaleText>
+								<i class="bi" :class="tableSortBy === 'name' ? (tableSortAsc ? 'bi-sort-up' : 'bi-sort-down') : 'bi-sort-up text-muted opacity-25'" style="font-size: 0.7rem"></i>
+							</small>
+						</th>
+						<th>
+							<small><LocaleText t="Allowed IPs"></LocaleText></small>
+						</th>
+						<th role="button" @click="tableSortBy = 'total_data'; tableSortAsc = tableSortBy === 'total_data' ? !tableSortAsc : false">
+							<small class="d-flex align-items-center gap-1">
+								<LocaleText t="Traffic"></LocaleText>
+								<i class="bi" :class="tableSortBy === 'total_data' ? (tableSortAsc ? 'bi-sort-up' : 'bi-sort-down') : 'bi-sort-up text-muted opacity-25'" style="font-size: 0.7rem"></i>
+							</small>
+						</th>
+						<th role="button" @click="tableSortBy = 'latest_handshake'; tableSortAsc = tableSortBy === 'latest_handshake' ? !tableSortAsc : false">
+							<small class="d-flex align-items-center gap-1">
+								<LocaleText t="Handshake"></LocaleText>
+								<i class="bi" :class="tableSortBy === 'latest_handshake' ? (tableSortAsc ? 'bi-sort-up' : 'bi-sort-down') : 'bi-sort-up text-muted opacity-25'" style="font-size: 0.7rem"></i>
+							</small>
+						</th>
+						<th><small><LocaleText t="Endpoint"></LocaleText></small></th>
+						<th style="width: 40px"></th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr v-for="peer in tableSortedPeers" :key="peer.id"
+						:class="{'table-warning': peer.restricted}"
+						role="button"
+						@click="configurationModals.peerSetting.modalOpen = true; configurationModalSelectedPeer = peer">
+						<td>
+							<span class="d-inline-block rounded-circle"
+								  :style="{width: '10px', height: '10px', backgroundColor: peer.status === 'running' ? '#28a745' : '#6c757d', boxShadow: peer.status === 'running' ? '0 0 0 3px #28a74545' : 'none'}">
+							</span>
+						</td>
+						<td>
+							<strong class="d-block" style="font-size: 0.85rem">{{ peer.name || 'Untitled' }}</strong>
+							<samp class="text-muted" style="font-size: 0.65rem">{{ peer.id.substring(0, 20) }}...</samp>
+						</td>
+						<td><small><samp>{{ peer.allowed_ip }}</samp></small></td>
+						<td>
+							<small class="d-flex flex-column">
+								<span><i class="bi bi-arrow-down text-success me-1"></i>{{ (peer.cumu_receive + peer.total_receive).toFixed(2) }} GB</span>
+								<span><i class="bi bi-arrow-up text-primary me-1"></i>{{ (peer.cumu_sent + peer.total_sent).toFixed(2) }} GB</span>
+							</small>
+						</td>
+						<td><small class="text-muted">{{ peer.latest_handshake }}</small></td>
+						<td><small class="text-muted"><samp>{{ peer.endpoint }}</samp></small></td>
+						<td @click.stop>
+							<div class="dropdown">
+								<button class="btn btn-sm btn-body rounded-3" data-bs-toggle="dropdown">
+									<i class="bi bi-three-dots-vertical"></i>
+								</button>
+								<ul class="dropdown-menu dropdown-menu-end rounded-3 shadow">
+									<li><a class="dropdown-item" role="button" @click="configurationModals.peerSetting.modalOpen = true; configurationModalSelectedPeer = peer"><i class="bi bi-pen me-2"></i><LocaleText t="Settings"></LocaleText></a></li>
+									<li v-if="peer.private_key"><a class="dropdown-item" role="button" @click="configurationModalSelectedPeer = peer; configurationModals.peerQRCode.modalOpen = true"><i class="bi bi-qr-code me-2"></i><LocaleText t="QR Code"></LocaleText></a></li>
+									<li><a class="dropdown-item" role="button" @click="configurationModalSelectedPeer = peer; configurationModals.assignPeer.modalOpen = true"><i class="bi bi-diagram-2 me-2"></i><LocaleText t="Assign"></LocaleText></a></li>
+								</ul>
+							</div>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+		<!-- Card/List View -->
+		<TransitionGroup v-else name="peerList" tag="div" class="row gx-2 gy-2 z-0 position-relative">
 			<div class="col-12"
 			     :class="{'col-lg-6 col-xl-4': dashboardStore.Configuration.Server.dashboard_peer_list_display === 'grid'}"
 			     :key="peer.id"

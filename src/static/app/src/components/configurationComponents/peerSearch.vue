@@ -23,6 +23,8 @@ export default {
 			sort: {
 				status: GetLocale("Status"),
 				name: GetLocale("Name"),
+				total_data: GetLocale("Total Usage"),
+				latest_handshake: GetLocale("Latest Handshake"),
 				allowed_ip: GetLocale("Allowed IPs"),
 				restricted: GetLocale("Restricted")
 			},
@@ -33,6 +35,7 @@ export default {
 				'60000': GetLocale('1 Minutes')
 			},
 			display: {
+				table: GetLocale('Table'),
 				grid: GetLocale('Grid'),
 				list: GetLocale('List')
 			},
