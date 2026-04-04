@@ -24,7 +24,7 @@ All credit for the base dashboard goes to the original author. This fork focuses
 - **Trusted IPs** — skip TOTP for admin and client from allowed networks
 
 ### Admin Features
-- **OPNsense Gateway generator** — export WireGuard peer config as OPNsense XML
+- **OPNsense Gateway generator** ⚠️ **Alpha** — export WireGuard peer config as OPNsense XML. **Not recommended for production use.** Please report any issues you encounter while testing.
 - **Broadcast AllowedIPs** — propagate a peer's allowed IPs to all other peers in one click
 - **Peer counts in sidebar** — connected/total counts next to each configuration
 - **Configurable admin session timeout**
@@ -51,6 +51,13 @@ WgDashboard++ uses its own versioning independent of upstream:
 - **Z** — bugfixes (+0.01)
 
 Current: **v1.0**
+
+## Feature Status
+
+| Feature | Status |
+|---------|--------|
+| Client portal, trusted IPs, density, dual-column view | ✅ Stable |
+| OPNsense Gateway integration | ⚠️ **Alpha** — testing only, please [report issues](https://git.half.net.ua/polumish/wgdashboard-plus-plus/-/issues) |
 
 ## Deployment
 
