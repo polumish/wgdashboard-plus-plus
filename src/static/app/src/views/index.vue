@@ -20,9 +20,9 @@ export default {
 
 <template>
 	<div class="container-fluid flex-grow-1 main" :data-bs-theme="this.dashboardConfigurationStore.Configuration.Server.dashboard_theme">
-		<div class="row h-100">
+		<div class="d-flex h-100">
 			<Navbar></Navbar>
-			<main class="flex-grow-1 overflow-y-scroll mb-0 pt-2">
+			<main class="flex-grow-1 overflow-y-scroll mb-0 pt-2" style="min-width: 0;">
 				<Suspense>
 					<RouterView v-slot="{Component}">
 						<Transition name="fade2" mode="out-in" appear>
