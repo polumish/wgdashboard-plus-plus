@@ -10,6 +10,7 @@ import requests
 
 from .ConnectionString import ConnectionString
 from .DashboardClientsPeerAssignment import DashboardClientsPeerAssignment
+from .DashboardClientConfigAccess import DashboardClientConfigAccess
 from .DashboardClientsTOTP import DashboardClientsTOTP
 from .DashboardOIDC import DashboardOIDC
 from .Utilities import ValidatePasswordStrength
@@ -78,6 +79,7 @@ class DashboardClients:
         self.__getClients()
         self.DashboardClientsTOTP = DashboardClientsTOTP()
         self.DashboardClientsPeerAssignment = DashboardClientsPeerAssignment(wireguardConfigurations)
+        self.DashboardClientConfigAccess = DashboardClientConfigAccess(wireguardConfigurations)
         
     def __getClients(self):
         with self.engine.connect() as conn:
@@ -495,4 +497,18 @@ class DashboardClients:
     
     def UnassignClient(self, AssignmentID):
         return self.DashboardClientsPeerAssignment.UnassignClients(AssignmentID)
-        
+
+    def GrantConfigAccess(self, ClientID, ConfigurationName, Role='manager'):
+        return self.DashboardClientConfigAccess.GrantAccess(ClientID, ConfigurationName, Role)
+
+    def RevokeConfigAccess(self, AccessID):
+        return self.DashboardClientConfigAccess.RevokeAccess(AccessID)
+
+    def GetClientConfigAccess(self, ClientID):
+        return self.DashboardClientConfigAccess.GetClientConfigurations(ClientID)
+
+    def GetClientManagedConfigurations(self, ClientID):
+        return self.DashboardClientConfigAccess.GetClientManagedConfigurations(ClientID)
+
+    def HasConfigAccess(self, ClientID, ConfigurationName, RequiredRole='viewer'):
+        return self.DashboardClientConfigAccess.HasAccess(ClientID, ConfigurationName, RequiredRole)

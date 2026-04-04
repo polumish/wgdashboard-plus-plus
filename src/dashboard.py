@@ -1659,6 +1659,36 @@ def API_Clients_DeleteClient():
         return ResponseObject(False, "Client does not exist")
     return ResponseObject(status=DashboardClients.DeleteClient(clientId))   
 
+@app.post(f'{APP_PREFIX}/api/clients/grantConfigAccess')
+def API_Clients_GrantConfigAccess():
+    data = request.get_json()
+    clientId = data.get("ClientID")
+    configName = data.get("ConfigurationName")
+    role = data.get("Role", "manager")
+    if not all([clientId, configName]):
+        return ResponseObject(False, "Please provide ClientID and ConfigurationName")
+    if not DashboardClients.GetClient(clientId):
+        return ResponseObject(False, "Client does not exist")
+    status, result = DashboardClients.GrantConfigAccess(clientId, configName, role)
+    if not status:
+        return ResponseObject(False, "Failed to grant access. Configuration may not exist or access already granted.")
+    return ResponseObject(True, data=result)
+
+@app.post(f'{APP_PREFIX}/api/clients/revokeConfigAccess')
+def API_Clients_RevokeConfigAccess():
+    data = request.get_json()
+    accessId = data.get("AccessID")
+    if not accessId:
+        return ResponseObject(False, "Please provide AccessID")
+    return ResponseObject(status=DashboardClients.RevokeConfigAccess(accessId))
+
+@app.get(f'{APP_PREFIX}/api/clients/getConfigAccess')
+def API_Clients_GetConfigAccess():
+    clientId = request.args.get("ClientID")
+    if not clientId:
+        return ResponseObject(False, "Please provide ClientID")
+    return ResponseObject(True, data=DashboardClients.GetClientConfigAccess(clientId))
+
 @app.get(f'{APP_PREFIX}/api/webHooks/getWebHooks')
 def API_WebHooks_GetWebHooks():
     return ResponseObject(data=DashboardWebHooks.GetWebHooks())

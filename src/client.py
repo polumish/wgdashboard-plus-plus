@@ -226,7 +226,166 @@ def createClientBlueprint(wireguardConfigurations: dict[WireguardConfiguration],
     def ClientAPI_Settings_UpdatePassword():
         data = request.get_json()
         status, message = dashboardClients.UpdateClientPassword(session['ClientID'], **data)
-    
-        return ResponseObject(status, message)       
-    
+
+        return ResponseObject(status, message)
+
+    # --- Managed Configurations (manager role) ---
+
+    def manager_required(configName):
+        """Check that current client has manager role for the given configuration."""
+        clientID = session.get('ClientID')
+        if not clientID:
+            return False
+        return dashboardClients.HasConfigAccess(clientID, configName, 'manager')
+
+    @client.get(f'{prefix}/api/managedConfigurations')
+    @login_required
+    def ClientAPI_ManagedConfigurations():
+        clientID = session['ClientID']
+        configs = dashboardClients.GetClientManagedConfigurations(clientID)
+        data = []
+        for configName in configs:
+            if configName in wireguardConfigurations:
+                wc = wireguardConfigurations[configName]
+                data.append({
+                    "name": wc.Name,
+                    "status": wc.Status,
+                    "address": wc.Address,
+                    "active_peers": len([p for p in wc.Peers if p.status == "running"]),
+                    "total_peers": len(wc.Peers),
+                })
+        return ResponseObject(True, data=data)
+
+    @client.get(f'{prefix}/api/managedConfigurations/<configName>/peers')
+    @login_required
+    def ClientAPI_ManagedConfigPeers(configName):
+        if not manager_required(configName):
+            return ResponseObject(False, "Access denied", status_code=403)
+        if configName not in wireguardConfigurations:
+            return ResponseObject(False, "Configuration not found", status_code=404)
+        wc = wireguardConfigurations[configName]
+        peers = []
+        for p in wc.Peers:
+            peers.append({
+                "id": p.id,
+                "name": p.name,
+                "allowed_ip": p.allowed_ip,
+                "endpoint": p.endpoint,
+                "status": p.status,
+                "latest_handshake": p.latest_handshake,
+                "total_receive": p.total_receive + p.cumu_receive,
+                "total_sent": p.total_sent + p.cumu_sent,
+                "total_data": p.total_data + p.cumu_data,
+            })
+        restricted = []
+        for p in wc.getRestrictedPeersList():
+            restricted.append({
+                "id": p.id,
+                "name": p.name,
+                "allowed_ip": p.allowed_ip,
+                "status": "restricted",
+            })
+        return ResponseObject(True, data={"peers": peers, "restricted": restricted})
+
+    @client.post(f'{prefix}/api/managedConfigurations/<configName>/addPeers')
+    @login_required
+    def ClientAPI_ManagedConfigAddPeers(configName):
+        if not manager_required(configName):
+            return ResponseObject(False, "Access denied", status_code=403)
+        if configName not in wireguardConfigurations:
+            return ResponseObject(False, "Configuration not found", status_code=404)
+        data = request.get_json()
+        wc = wireguardConfigurations[configName]
+        from modules.Utilities import GenerateWireguardPrivateKey, GenerateWireguardPublicKey
+        private_key = GenerateWireguardPrivateKey()[1]
+        public_key = GenerateWireguardPublicKey(private_key)[1]
+        ipStatus, availableIPs = wc.getAvailableIP(-1)
+        if not ipStatus or not availableIPs:
+            return ResponseObject(False, "No available IP addresses")
+        first_subnet = list(availableIPs.keys())[0]
+        if len(availableIPs[first_subnet]) == 0:
+            return ResponseObject(False, "No available IP addresses")
+        assigned_ip = availableIPs[first_subnet][0]
+        peer = {
+            "id": public_key,
+            "private_key": private_key,
+            "allowed_ip": assigned_ip,
+            "name": data.get('name', ''),
+            "DNS": data.get('DNS', wc.DefaultDNS),
+            "endpoint_allowed_ip": data.get('endpoint_allowed_ip', wc.DefaultEndpointAllowedIp),
+            "mtu": data.get('mtu', wc.DefaultMTU),
+            "keepalive": data.get('keepalive', wc.DefaultKeepAlive),
+            "preshared_key": data.get('preshared_key', ''),
+            "advanced_security": "off",
+        }
+        status, peers_added, msg = wc.addPeers([peer])
+        return ResponseObject(status, msg, data=peers_added)
+
+    @client.post(f'{prefix}/api/managedConfigurations/<configName>/deletePeers')
+    @login_required
+    def ClientAPI_ManagedConfigDeletePeers(configName):
+        if not manager_required(configName):
+            return ResponseObject(False, "Access denied", status_code=403)
+        if configName not in wireguardConfigurations:
+            return ResponseObject(False, "Configuration not found", status_code=404)
+        data = request.get_json()
+        peers = data.get('peers', [])
+        if not peers:
+            return ResponseObject(False, "No peers specified")
+        wc = wireguardConfigurations[configName]
+        status, msg = wc.deletePeers(peers, [], [])
+        return ResponseObject(status, msg)
+
+    @client.post(f'{prefix}/api/managedConfigurations/<configName>/restrictPeers')
+    @login_required
+    def ClientAPI_ManagedConfigRestrictPeers(configName):
+        if not manager_required(configName):
+            return ResponseObject(False, "Access denied", status_code=403)
+        if configName not in wireguardConfigurations:
+            return ResponseObject(False, "Configuration not found", status_code=404)
+        data = request.get_json()
+        peers = data.get('peers', [])
+        wc = wireguardConfigurations[configName]
+        status, msg = wc.restrictPeers(peers)
+        return ResponseObject(status, msg)
+
+    @client.post(f'{prefix}/api/managedConfigurations/<configName>/allowAccessPeers')
+    @login_required
+    def ClientAPI_ManagedConfigAllowPeers(configName):
+        if not manager_required(configName):
+            return ResponseObject(False, "Access denied", status_code=403)
+        if configName not in wireguardConfigurations:
+            return ResponseObject(False, "Configuration not found", status_code=404)
+        data = request.get_json()
+        peers = data.get('peers', [])
+        wc = wireguardConfigurations[configName]
+        status, msg = wc.allowAccessPeers(peers)
+        return ResponseObject(status, msg)
+
+    @client.get(f'{prefix}/api/managedConfigurations/<configName>/downloadPeer')
+    @login_required
+    def ClientAPI_ManagedConfigDownloadPeer(configName):
+        if not manager_required(configName):
+            return ResponseObject(False, "Access denied", status_code=403)
+        if configName not in wireguardConfigurations:
+            return ResponseObject(False, "Configuration not found", status_code=404)
+        peerID = request.args.get('id')
+        if not peerID:
+            return ResponseObject(False, "Peer ID required")
+        wc = wireguardConfigurations[configName]
+        found, peer = wc.searchPeer(peerID)
+        if not found:
+            return ResponseObject(False, "Peer not found")
+        return ResponseObject(True, data=peer.downloadPeer())
+
+    @client.get(f'{prefix}/api/managedConfigurations/<configName>/availableIPs')
+    @login_required
+    def ClientAPI_ManagedConfigAvailableIPs(configName):
+        if not manager_required(configName):
+            return ResponseObject(False, "Access denied", status_code=403)
+        if configName not in wireguardConfigurations:
+            return ResponseObject(False, "Configuration not found", status_code=404)
+        wc = wireguardConfigurations[configName]
+        return ResponseObject(True, data=wc.getAvailableIP())
+
     return client
