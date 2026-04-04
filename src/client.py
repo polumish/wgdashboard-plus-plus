@@ -301,7 +301,7 @@ def createClientBlueprint(wireguardConfigurations: dict[WireguardConfiguration],
         from modules.Utilities import GenerateWireguardPrivateKey, GenerateWireguardPublicKey
         private_key = GenerateWireguardPrivateKey()[1]
         public_key = GenerateWireguardPublicKey(private_key)[1]
-        ipStatus, availableIPs = wc.getAvailableIP(-1)
+        ipStatus, availableIPs = wc.getAvailableIP(1)
         if not ipStatus or not availableIPs:
             return ResponseObject(False, "No available IP addresses")
         first_subnet = list(availableIPs.keys())[0]
