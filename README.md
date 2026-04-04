@@ -52,11 +52,6 @@ Fit more peers on screen with tight spacing.
 
 ![Compact Mode](docs/images/sidebar-compact.png)
 
-### Login
-Custom branded login page.
-
-![Login](docs/images/login.png)
-
 ## Changes vs Upstream
 
 ### Client Features
