@@ -484,7 +484,7 @@ watch(() => route.query.id, (newValue) => {
 			:configuration="configurationInfo">
 		</PeerSearch>
 		<!-- Table View -->
-		<div v-if="dashboardStore.Configuration.Server.dashboard_peer_list_display === 'table'" class="table-responsive">
+		<div v-if="dashboardStore.Configuration.Server.dashboard_peer_list_display === 'table'" class="table-responsive" style="overflow: visible;">
 			<table class="table table-hover align-middle mb-0">
 				<thead class="table-light">
 					<tr>
@@ -538,11 +538,11 @@ watch(() => route.query.id, (newValue) => {
 						<td><small class="text-muted">{{ peer.latest_handshake }}</small></td>
 						<td><small class="text-muted"><samp>{{ peer.endpoint }}</samp></small></td>
 						<td @click.stop class="position-relative">
-							<div class="dropdown">
+							<div class="dropup dropstart">
 								<button class="btn btn-sm btn-body rounded-3" data-bs-toggle="dropdown">
 									<i class="bi bi-three-dots-vertical"></i>
 								</button>
-								<ul class="dropdown-menu dropdown-menu-end rounded-3 shadow" style="min-width: 200px">
+								<ul class="dropdown-menu rounded-3 shadow" style="min-width: 200px; position: fixed;">
 									<template v-if="peer.private_key">
 										<li class="d-flex px-2 gap-1">
 											<button class="btn btn-sm btn-body rounded-3 flex-fill" title="Download" @click="tableDownloadPeer(peer)"><i class="bi bi-download"></i></button>
