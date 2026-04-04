@@ -30,6 +30,14 @@ pip install gunicorn
 
 Panel listens on `0.0.0.0:10086` by default. Change in `wg-dashboard.ini` after first start.
 
+## First Login
+
+Default credentials:
+- **Username:** `admin`
+- **Password:** `admin`
+
+⚠️ **Change the password immediately** after first login via Settings → Account.
+
 ## Systemd Service
 
 Create `/etc/systemd/system/wg-dashboard.service`:
