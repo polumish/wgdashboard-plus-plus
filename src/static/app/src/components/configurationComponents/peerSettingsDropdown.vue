@@ -23,6 +23,7 @@ export default {
 			deleteBtnDisabled: false,
 			restrictBtnDisabled: false,
 			allowAccessBtnDisabled: false,
+			broadcastBtnDisabled: false,
 			confirmDelete: false,
 			height: 0
 		}
@@ -88,6 +89,17 @@ export default {
 				this.dashboardStore.newMessage("Server", res.message, res.status ? "success":"danger")
 				this.$emit("refresh")
 				this.allowAccessBtnDisabled = false
+			})
+		},
+		broadcastAllowedIPs(){
+			if (!confirm(`Broadcast this peer's AllowedIPs (${this.Peer.allowed_ip}) to all other peers in this configuration?`)) return
+			this.broadcastBtnDisabled = true
+			fetchPost(`/api/broadcastPeerAllowedIPs/${this.$route.params.id}`, {
+				id: this.Peer.id
+			}, (res) => {
+				this.dashboardStore.newMessage("Server", res.message, res.status ? "success":"danger")
+				this.$emit("refresh")
+				this.broadcastBtnDisabled = false
 			})
 		},
 
@@ -174,6 +186,15 @@ export default {
 					<PeerTagSelectDropdown
 						@update="this.$emit('refresh')"
 						:Peer="Peer" :ConfigurationInfo="ConfigurationInfo"></PeerTagSelectDropdown>
+				</li>
+				<li>
+					<a class="dropdown-item d-flex" role="button"
+					   @click="this.broadcastAllowedIPs()"
+					   :class="{disabled: this.broadcastBtnDisabled}"
+					>
+						<i class="me-auto bi bi-broadcast"></i>
+						<LocaleText t="Broadcast AllowedIPs"></LocaleText>
+					</a>
 				</li>
 				<li><hr class="dropdown-divider"></li>
 				<li>

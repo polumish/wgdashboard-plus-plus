@@ -860,6 +860,150 @@ def API_allowAccessPeers(configName: str) -> ResponseObject:
         return ResponseObject(status, msg)
     return ResponseObject(False, "Configuration does not exist")
 
+@app.post(f'{APP_PREFIX}/api/broadcastPeerAllowedIPs/<configName>')
+def API_broadcastPeerAllowedIPs(configName: str):
+    if configName not in WireguardConfigurations:
+        return ResponseObject(False, "Configuration does not exist")
+    data = request.get_json()
+    sourceId = data.get('id', '')
+    if not sourceId:
+        return ResponseObject(False, "Please provide peer ID")
+    wc = WireguardConfigurations[configName]
+    found, sourcePeer = wc.searchPeer(sourceId)
+    if not found:
+        return ResponseObject(False, "Source peer not found")
+    sourceIPs = [ip.strip() for ip in sourcePeer.allowed_ip.split(',') if ip.strip()]
+    if not sourceIPs:
+        return ResponseObject(False, "Source peer has no AllowedIPs")
+    updated = 0
+    errors = 0
+    for p in wc.Peers:
+        if p.id == sourceId:
+            continue
+        currentEPs = [ip.strip() for ip in p.endpoint_allowed_ip.split(',') if ip.strip()]
+        newEPs = list(currentEPs)
+        for sip in sourceIPs:
+            if sip not in newEPs:
+                newEPs.append(sip)
+        if newEPs != currentEPs:
+            newEPStr = ', '.join(newEPs)
+            try:
+                with wc.engine.begin() as conn:
+                    conn.execute(
+                        wc.peersTable.update().values({"endpoint_allowed_ip": newEPStr})
+                        .where(wc.peersTable.c.id == p.id)
+                    )
+                updated += 1
+            except Exception:
+                errors += 1
+    wc.getPeers()
+    return ResponseObject(True, f"Updated {updated} peers" + (f", {errors} errors" if errors else ""),
+                          data={"updated": updated, "errors": errors})
+
+@app.post(f'{APP_PREFIX}/api/addOPNsenseGateway/<configName>')
+def API_addOPNsenseGateway(configName: str):
+    if configName not in WireguardConfigurations:
+        return ResponseObject(False, "Configuration does not exist")
+    data = request.get_json()
+    name = data.get('name', 'OPNsense')
+    lanSubnets = data.get('lan_subnets', '')
+    keepalive = data.get('keepalive', 25)
+    wc = WireguardConfigurations[configName]
+    from modules.Utilities import GenerateWireguardPrivateKey, GenerateWireguardPublicKey
+    privStatus, privateKey = GenerateWireguardPrivateKey()
+    if not privStatus:
+        return ResponseObject(False, "Failed to generate WireGuard keys")
+    pubStatus, publicKey = GenerateWireguardPublicKey(privateKey)
+    if not pubStatus:
+        return ResponseObject(False, "Failed to generate WireGuard keys")
+    ipStatus, availableIPs = wc.getAvailableIP(1)
+    if not ipStatus or not availableIPs:
+        return ResponseObject(False, "No available IP addresses")
+    firstSubnet = list(availableIPs.keys())[0]
+    if len(availableIPs[firstSubnet]) == 0:
+        return ResponseObject(False, "No available IP addresses")
+    assignedIP = availableIPs[firstSubnet][0]
+    allowedIP = assignedIP
+    if lanSubnets:
+        allowedIP = assignedIP + ', ' + lanSubnets
+    peer = {
+        "id": publicKey,
+        "private_key": privateKey,
+        "allowed_ip": allowedIP,
+        "name": name,
+        "DNS": "",
+        "endpoint_allowed_ip": wc.Address,
+        "mtu": DashboardConfig.GetConfig("Peers", "peer_MTU")[1],
+        "keepalive": keepalive,
+        "preshared_key": "",
+        "advanced_security": "off",
+    }
+    status, peersAdded, msg = wc.addPeers([peer])
+    if not status:
+        return ResponseObject(False, f"Failed to create peer: {msg}")
+    remoteEndpoint = DashboardConfig.GetConfig("Peers", "remote_endpoint")[1]
+    wgSubnet = wc.Address
+    listenPort = wc.ListenPort
+    configPublicKey = wc.PublicKey
+    opnsenseConfig = f"""[Interface]
+PrivateKey = {privateKey}
+Address = {assignedIP.replace('/32', '/' + firstSubnet.split('/')[1]) if '/32' in assignedIP else assignedIP}
+# ListenPort = 51820
+
+[Peer]
+PublicKey = {configPublicKey}
+Endpoint = {remoteEndpoint}:{listenPort}
+AllowedIPs = {wgSubnet}
+PersistentKeepalive = {keepalive}
+"""
+    import uuid as _uuid
+    gwUuid = str(_uuid.uuid4())
+    peerUuid = str(_uuid.uuid4())
+    opnsenseXml = f"""<?xml version="1.0"?>
+<opnsense>
+  <wireguard>
+    <client version="1.0.0">
+      <clients>
+        <client uuid="{peerUuid}">
+          <enabled>1</enabled>
+          <name>{name}-server</name>
+          <pubkey>{configPublicKey}</pubkey>
+          <psk></psk>
+          <tunneladdress>{wgSubnet}</tunneladdress>
+          <serveraddress>{remoteEndpoint}</serveraddress>
+          <serverport>{listenPort}</serverport>
+          <keepalive>{keepalive}</keepalive>
+        </client>
+      </clients>
+    </client>
+    <server version="1.0.0">
+      <servers>
+        <server uuid="{gwUuid}">
+          <enabled>1</enabled>
+          <name>{name}</name>
+          <pubkey>{publicKey}</pubkey>
+          <privkey>{privateKey}</privkey>
+          <port>51820</port>
+          <tunneladdress>{assignedIP.replace('/32', '/' + firstSubnet.split('/')[1]) if '/32' in assignedIP else assignedIP}</tunneladdress>
+          <dns></dns>
+          <disableroutes>1</disableroutes>
+          <gateway></gateway>
+          <peers>{peerUuid}</peers>
+        </server>
+      </servers>
+    </server>
+  </wireguard>
+</opnsense>
+"""
+    return ResponseObject(True, data={
+        "peer": peersAdded[0] if peersAdded else None,
+        "opnsenseConfig": opnsenseConfig,
+        "opnsenseXml": opnsenseXml,
+        "assignedIP": assignedIP,
+        "publicKey": publicKey,
+        "privateKey": privateKey,
+    })
+
 @app.post(f'{APP_PREFIX}/api/addPeers/<configName>')
 def API_addPeers(configName):
     if configName in WireguardConfigurations.keys():

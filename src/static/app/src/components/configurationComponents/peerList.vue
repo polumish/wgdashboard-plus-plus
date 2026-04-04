@@ -22,6 +22,7 @@ const PeerJobsLogsModal = defineAsyncComponent(() => import("@/components/config
 const EditConfigurationModal = defineAsyncComponent(() => import("@/components/configurationComponents/editConfiguration.vue"))
 const SelectPeersModal = defineAsyncComponent(() => import("@/components/configurationComponents/selectPeers.vue"))
 const PeerAddModal = defineAsyncComponent(() => import("@/components/configurationComponents/peerAddModal.vue"))
+const OPNsenseGatewayModal = defineAsyncComponent(() => import("@/components/configurationComponents/opnsenseGatewayModal.vue"))
 
 const dashboardStore = DashboardConfigurationStore()
 const wireguardConfigurationStore = WireguardConfigurationsStore()
@@ -32,7 +33,10 @@ const configurationToggling = ref(false)
 const configurationModalSelectedPeer = ref({})
 const configurationModals = ref({
 	peerNew: {
-		modalOpen: false	
+		modalOpen: false
+	},
+	opnsenseGateway: {
+		modalOpen: false
 	},
 	peerSetting: {
 		modalOpen: false,
@@ -293,6 +297,13 @@ watch(() => route.query.id, (newValue) => {
 					<i class="bi bi-plus-circle me-2"></i>
 					<LocaleText t="Peer"></LocaleText>
 				</a>
+				<a
+					role="button"
+					@click="configurationModals.opnsenseGateway.modalOpen = true"
+					class="titleBtn py-2 text-decoration-none btn text-success-emphasis bg-success-subtle rounded-3 border-1 border-success-subtle ">
+					<i class="bi bi-router me-2"></i>
+					<LocaleText t="OPNsense"></LocaleText>
+				</a>
 				<button class="titleBtn py-2 text-decoration-none btn text-primary-emphasis bg-primary-subtle rounded-3 border-1 border-primary-subtle "
 				        @click="configurationModals.editConfiguration.modalOpen = true"
 				        type="button" aria-expanded="false">
@@ -451,6 +462,12 @@ watch(() => route.query.id, (newValue) => {
 				@addedPeers="configurationModals.peerNew.modalOpen = false; fetchPeerList()"
 			></PeerAddModal>
 		</Suspense>
+		<OPNsenseGatewayModal
+			key="OPNsenseGatewayModal"
+			v-if="configurationModals.opnsenseGateway.modalOpen"
+			@close="configurationModals.opnsenseGateway.modalOpen = false"
+			@added="fetchPeerList()"
+		></OPNsenseGatewayModal>
 		<PeerJobsAllModal
 			key="PeerJobsAllModal"
 			v-if="configurationModals.peerScheduleJobsAll.modalOpen"
