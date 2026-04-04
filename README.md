@@ -5,9 +5,23 @@
 </p>
 
 <p align="center">
-    <img src="https://img.shields.io/badge/Made_With-Python-blue?style=for-the-badge&logo=python&logoColor=ffffff">
-    <img src="https://img.shields.io/badge/Made_With-Vue.js-42b883?style=for-the-badge&logo=vuedotjs&logoColor=ffffff">
-    <img src="https://img.shields.io/badge/License-Apache_License_2.0-D22128?style=for-the-badge&logo=apache&logoColor=ffffff">
+    <a href="https://github.com/polumish/wgdashboard-plus-plus/releases/latest"><img src="https://img.shields.io/github/v/release/polumish/wgdashboard-plus-plus?style=for-the-badge&color=blue"></a>
+    <a href="https://github.com/polumish/wgdashboard-plus-plus/blob/main/LICENSE"><img src="https://img.shields.io/github/license/polumish/wgdashboard-plus-plus?style=for-the-badge&color=D22128"></a>
+    <a href="https://github.com/polumish/wgdashboard-plus-plus/stargazers"><img src="https://img.shields.io/github/stars/polumish/wgdashboard-plus-plus?style=for-the-badge&color=yellow"></a>
+    <a href="https://github.com/polumish/wgdashboard-plus-plus/issues"><img src="https://img.shields.io/github/issues/polumish/wgdashboard-plus-plus?style=for-the-badge&color=red"></a>
+</p>
+
+<p align="center">
+    <img src="https://img.shields.io/badge/Python-3670A0?style=for-the-badge&logo=python&logoColor=ffffff">
+    <img src="https://img.shields.io/badge/Vue.js-42b883?style=for-the-badge&logo=vuedotjs&logoColor=ffffff">
+    <img src="https://img.shields.io/badge/WireGuard-88171A?style=for-the-badge&logo=wireguard&logoColor=ffffff">
+    <img src="https://img.shields.io/badge/Self--Hosted-0B5FFF?style=for-the-badge">
+</p>
+
+<p align="center">
+    <a href="https://github.com/polumish/wgdashboard-plus-plus/releases"><img src="https://img.shields.io/badge/Release_Notes-v1.0-brightgreen?style=for-the-badge"></a>
+    <a href="https://github.com/polumish/wgdashboard-plus-plus/discussions"><img src="https://img.shields.io/badge/Discussions-welcome-purple?style=for-the-badge&logo=github"></a>
+    <a href="https://git.half.net.ua/polumish/wgdashboard-plus-plus/-/issues"><img src="https://img.shields.io/badge/Bug_Reports-welcome-orange?style=for-the-badge&logo=gitlab"></a>
 </p>
 
 ## About
