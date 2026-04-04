@@ -109,7 +109,7 @@ export default {
 					<LocaleText t="Welcome to"></LocaleText>
 				</h4>
 				<span class="dashboardLogo display-3">
-					<strong>WGDashboard</strong>
+					<strong>WgDashboard ++</strong>
 				</span>
 				<form @submit="(e) => {e.preventDefault(); this.auth();}"
 				      class="mt-3"
@@ -185,8 +185,10 @@ export default {
 			</div>
 		</div>
 		<small class="text-muted pb-3 d-block w-100 text-center mt-3">
-			WGDashboard {{ this.version }} | Developed with ❤️ by 
-			<a href="https://github.com/donaldzou" target="_blank"><strong>Donald Zou</strong></a>
+			WgDashboard ++ {{ this.version }}<br>
+			Based on <a href="https://github.com/donaldzou/WGDashboard" target="_blank">WGDashboard</a> by
+			<a href="https://github.com/donaldzou" target="_blank"><strong>Donald Zou</strong></a><br>
+			Forked by <a href="https://git.half.net.ua/polumish" target="_blank"><strong>polumish</strong></a>
 		</small>
 		<div class="messageCentre text-body position-absolute d-flex">
 			<TransitionGroup name="message" tag="div"
