@@ -59,7 +59,7 @@ mirror-github:
   script:
     - cd /opt/WGDashboard
     - git remote remove github 2>/dev/null || true
-    - git remote add github "https://polumish:${GITHUB_TOKEN}@github.com/polumish/wgdashboard-plus-plus.git"
+    - git remote add github "https://x-access-token:${GITHUB_TOKEN}@github.com/polumish/wgdashboard-plus-plus.git"
     - git push github main --force
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
