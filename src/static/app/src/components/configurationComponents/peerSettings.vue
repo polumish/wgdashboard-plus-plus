@@ -54,6 +54,24 @@ export default {
 				}
 				this.$emit("refresh")
 			})
+		},
+		toggleGateway(){
+			this.saving = true
+			const newVal = !this.data.is_gateway
+			fetchPost(`/api/setPeerGatewayFlag/${this.$route.params.id}`, {
+				id: this.data.id,
+				is_gateway: newVal
+			}, (res) => {
+				this.saving = false
+				if (res.status){
+					this.data.is_gateway = newVal
+					this.dashboardConfigurationStore.newMessage("Server",
+						newVal ? "Peer marked as gateway" : "Gateway flag removed", "success")
+					this.$emit("refresh")
+				}else{
+					this.dashboardConfigurationStore.newMessage("Server", res.message, "danger")
+				}
+			})
 		}
 	},
 	beforeMount() {
@@ -217,6 +235,23 @@ export default {
 									<i class="bi bi-save-fill me-2"></i>
 									<LocaleText t="Save"></LocaleText>
 								</button>
+							</div>
+							<hr>
+							<div class="d-flex gap-2 align-items-center">
+								<strong>
+									<i class="bi bi-router me-2"></i>
+									<LocaleText t="Mark as Gateway"></LocaleText>
+								</strong>
+								<small class="text-muted ms-2">
+									<LocaleText t="Show this peer in the Gateways view"></LocaleText>
+								</small>
+								<div class="form-check form-switch ms-auto mb-0">
+									<input class="form-check-input" type="checkbox" role="switch"
+										:id="'peerGatewayToggle_' + this.data.id"
+										:checked="this.data.is_gateway"
+										:disabled="this.saving"
+										@change="this.toggleGateway()">
+								</div>
 							</div>
 							<hr>
 							<div class="d-flex gap-2 align-items-center">
