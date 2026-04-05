@@ -956,64 +956,54 @@ def API_addOPNsenseGateway(configName: str):
     if not status:
         return ResponseObject(False, f"Failed to create peer: {msg}")
     remoteEndpoint = DashboardConfig.GetConfig("Peers", "remote_endpoint")[1]
-    wgSubnet = wc.Address
     listenPort = wc.ListenPort
     configPublicKey = wc.PublicKey
+    import ipaddress as _ipaddress
+    # Compute the WG tunnel network (e.g. 10.200.0.0/24) from server Address.
+    # wc.Address may contain multiple comma-separated addresses (IPv4+IPv6).
+    tunnelNetwork = ''
+    prefixLen = ''
+    for addr in (a.strip() for a in wc.Address.split(',')):
+        if not addr:
+            continue
+        try:
+            iface = _ipaddress.ip_interface(addr)
+            if iface.version == 4:
+                tunnelNetwork = str(iface.network)
+                prefixLen = str(iface.network.prefixlen)
+                break
+        except ValueError:
+            continue
+    if not tunnelNetwork:
+        # Fallback: take first token as-is
+        tunnelNetwork = wc.Address.split(',')[0].strip()
+        prefixLen = tunnelNetwork.split('/')[1] if '/' in tunnelNetwork else '32'
+    # Client-side tunnel address: replace /32 from peer IP with the actual WG prefix
+    if '/32' in assignedIP:
+        clientTunnelAddress = assignedIP.replace('/32', '/' + prefixLen)
+    else:
+        clientTunnelAddress = assignedIP
     opnsenseConfig = f"""[Interface]
 PrivateKey = {privateKey}
-Address = {assignedIP.replace('/32', '/' + firstSubnet.split('/')[1]) if '/32' in assignedIP else assignedIP}
-# ListenPort = 51820
+Address = {clientTunnelAddress}
+ListenPort = 51820
 
 [Peer]
 PublicKey = {configPublicKey}
 Endpoint = {remoteEndpoint}:{listenPort}
-AllowedIPs = {wgSubnet}
+AllowedIPs = {tunnelNetwork}
 PersistentKeepalive = {keepalive}
-"""
-    import uuid as _uuid
-    gwUuid = str(_uuid.uuid4())
-    peerUuid = str(_uuid.uuid4())
-    opnsenseXml = f"""<?xml version="1.0"?>
-<opnsense>
-  <wireguard>
-    <client version="1.0.0">
-      <clients>
-        <client uuid="{peerUuid}">
-          <enabled>1</enabled>
-          <name>{name}-server</name>
-          <pubkey>{configPublicKey}</pubkey>
-          <psk></psk>
-          <tunneladdress>{wgSubnet}</tunneladdress>
-          <serveraddress>{remoteEndpoint}</serveraddress>
-          <serverport>{listenPort}</serverport>
-          <keepalive>{keepalive}</keepalive>
-        </client>
-      </clients>
-    </client>
-    <server version="1.0.0">
-      <servers>
-        <server uuid="{gwUuid}">
-          <enabled>1</enabled>
-          <name>{name}</name>
-          <pubkey>{publicKey}</pubkey>
-          <privkey>{privateKey}</privkey>
-          <port>51820</port>
-          <tunneladdress>{assignedIP.replace('/32', '/' + firstSubnet.split('/')[1]) if '/32' in assignedIP else assignedIP}</tunneladdress>
-          <dns></dns>
-          <disableroutes>1</disableroutes>
-          <gateway></gateway>
-          <peers>{peerUuid}</peers>
-        </server>
-      </servers>
-    </server>
-  </wireguard>
-</opnsense>
 """
     return ResponseObject(True, data={
         "peer": peersAdded[0] if peersAdded else None,
         "opnsenseConfig": opnsenseConfig,
-        "opnsenseXml": opnsenseXml,
         "assignedIP": assignedIP,
+        "clientTunnelAddress": clientTunnelAddress,
+        "tunnelNetwork": tunnelNetwork,
+        "serverPublicKey": configPublicKey,
+        "serverEndpoint": remoteEndpoint,
+        "serverPort": listenPort,
+        "keepalive": keepalive,
         "publicKey": publicKey,
         "privateKey": privateKey,
     })
