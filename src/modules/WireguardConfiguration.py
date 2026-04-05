@@ -1250,7 +1250,20 @@ class WireguardConfiguration:
             self.configurationInfo.PeerTrafficTracking = value
         elif key == "PeerHistoricalEndpointTracking":
             self.configurationInfo.PeerHistoricalEndpointTracking = value
-        else: 
+        elif key == "RoutedLANSubnets":
+            # Validate comma-separated CIDR list
+            raw = (value or '').strip()
+            if raw:
+                import ipaddress as _ipaddress
+                for token in (t.strip() for t in raw.split(',')):
+                    if not token:
+                        continue
+                    try:
+                        _ipaddress.ip_network(token, strict=False)
+                    except ValueError:
+                        return False, f"Invalid subnet: {token}", None
+            self.configurationInfo.RoutedLANSubnets = raw
+        else:
             return False, "Key does not exist", None
         self.storeConfigurationInfo()
         return True, None, None

@@ -1141,6 +1141,76 @@ def API_getOPNsenseGatewayData(configName: str):
     })
 
 
+def _policyRoutingTableId(configName: str) -> int:
+    """Deterministic routing table ID 100-252 derived from config name."""
+    import hashlib
+    h = int(hashlib.sha1(configName.encode()).hexdigest(), 16)
+    return 100 + (h % 153)  # 100..252
+
+
+def _configSubnetForPolicy(wc) -> str | None:
+    """Pick the IPv4 /N subnet from wc.Address for source matching."""
+    import ipaddress as _ipaddress
+    for addr in (a.strip() for a in (wc.Address or '').split(',')):
+        if not addr:
+            continue
+        try:
+            iface = _ipaddress.ip_interface(addr)
+            if iface.version == 4:
+                return str(iface.network)
+        except ValueError:
+            continue
+    return None
+
+
+def _applyPolicyRoutesLive(configName: str, subnet: str, lanList: list[str], tableId: int):
+    """Apply ip rule + routes now without touching .conf. Idempotent."""
+    import subprocess
+    # Flush previous state for this table
+    subprocess.run(['ip', 'route', 'flush', 'table', str(tableId)],
+                   capture_output=True, text=True)
+    # Remove any existing rule for this source
+    while True:
+        res = subprocess.run(['ip', 'rule', 'del', 'from', subnet, 'table', str(tableId)],
+                             capture_output=True, text=True)
+        if res.returncode != 0:
+            break
+    if not lanList and not subnet:
+        return True, "Policy routes cleared"
+    # Add rule
+    subprocess.run(['ip', 'rule', 'add', 'from', subnet, 'table', str(tableId), 'priority', '100'],
+                   capture_output=True, text=True)
+    # Add routes in the custom table
+    subprocess.run(['ip', 'route', 'add', subnet, 'dev', configName, 'table', str(tableId)],
+                   capture_output=True, text=True)
+    for lan in lanList:
+        subprocess.run(['ip', 'route', 'add', lan, 'dev', configName, 'table', str(tableId)],
+                       capture_output=True, text=True)
+    return True, f"Applied: rule from {subnet} → table {tableId}, {len(lanList)} LAN subnets via {configName}"
+
+
+@app.post(f'{APP_PREFIX}/api/applyPolicyRoutes/<configName>')
+def API_applyPolicyRoutes(configName: str):
+    """Apply policy-routing for this config based on its RoutedLANSubnets info.
+    Reads current saved value from configurationInfo and pushes ip rule/routes."""
+    if configName not in WireguardConfigurations:
+        return ResponseObject(False, "Configuration does not exist")
+    wc = WireguardConfigurations[configName]
+    raw = (wc.configurationInfo.RoutedLANSubnets or '').strip()
+    lanList = [s.strip() for s in raw.split(',') if s.strip()] if raw else []
+    subnet = _configSubnetForPolicy(wc)
+    if not subnet:
+        return ResponseObject(False, "Could not determine IPv4 subnet for this config")
+    tableId = _policyRoutingTableId(configName)
+    ok, msg = _applyPolicyRoutesLive(configName, subnet, lanList, tableId)
+    if ok:
+        return ResponseObject(True, msg, data={
+            "tableId": tableId, "subnet": subnet, "lanSubnets": lanList,
+            "configName": configName
+        })
+    return ResponseObject(False, msg)
+
+
 @app.post(f'{APP_PREFIX}/api/setOpnsenseListenPort/<configName>')
 def API_setOpnsenseListenPort(configName: str):
     if configName not in WireguardConfigurations:

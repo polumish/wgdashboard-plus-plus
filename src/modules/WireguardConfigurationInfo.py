@@ -21,3 +21,4 @@ class WireguardConfigurationInfo(BaseModel):
     PeerGroups: dict[str, PeerGroupsClass] = {}
     PeerTrafficTracking: bool = True
     PeerHistoricalEndpointTracking: bool = True
+    RoutedLANSubnets: str = ''

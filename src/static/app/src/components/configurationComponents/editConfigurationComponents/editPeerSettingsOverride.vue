@@ -7,6 +7,11 @@ const saving = ref(false)
 const overridePeerSettings = ref({...props.configuration.Info.OverridePeerSettings})
 const edited = ref(false)
 const errorMsg = ref("")
+const routedLANSubnets = ref(props.configuration.Info.RoutedLANSubnets || '')
+const routesSaving = ref(false)
+const routesMsg = ref('')
+const applying = ref(false)
+const applyResult = ref(null)
 
 onMounted(() => {
 	document.querySelectorAll("#editPeerSettingsOverride input").forEach(
@@ -19,6 +24,33 @@ onMounted(() => {
 const resetForm = () => {
 	overridePeerSettings.value = props.configuration.Info.OverridePeerSettings
 	edited.value = false
+}
+
+const saveRoutedLANSubnets = async () => {
+	routesSaving.value = true
+	routesMsg.value = ''
+	await fetchPost("/api/updateWireguardConfigurationInfo", {
+		Name: props.configuration.Name,
+		Key: "RoutedLANSubnets",
+		Value: routedLANSubnets.value
+	}, (res) => {
+		routesSaving.value = false
+		if (res.status){
+			props.configuration.Info.RoutedLANSubnets = routedLANSubnets.value
+			routesMsg.value = 'Saved'
+		}else{
+			routesMsg.value = res.message
+		}
+	})
+}
+
+const applyPolicyRoutes = async () => {
+	applying.value = true
+	applyResult.value = null
+	await fetchPost(`/api/applyPolicyRoutes/${props.configuration.Name}`, {}, (res) => {
+		applying.value = false
+		applyResult.value = res.status ? {ok: true, data: res.data, msg: res.message} : {ok: false, msg: res.message}
+	})
 }
 
 const submitForm = async () => {
@@ -142,6 +174,52 @@ const submitForm = async () => {
 				<i class="bi bi-save-fill me-2"></i>
 				<LocaleText t="Save"></LocaleText>
 			</button>
+		</div>
+	</div>
+
+	<hr class="my-4">
+
+	<h5 class="mb-0">
+		<i class="bi bi-signpost-split me-2"></i>
+		<LocaleText t="Routed LAN Subnets"></LocaleText>
+	</h5>
+	<h6 class="mb-3 text-muted">
+		<small>
+			<LocaleText t="LANs reachable via this WG interface. Installs server-side policy routing so clients of this config reach these subnets through this tunnel, regardless of what other tunnels exist."></LocaleText>
+		</small>
+	</h6>
+	<div class="d-flex gap-2 flex-column">
+		<div>
+			<input type="text" class="form-control form-control-sm rounded-3"
+				:disabled="routesSaving"
+				v-model="routedLANSubnets"
+				placeholder="e.g. 10.0.50.0/24, 10.0.54.0/24">
+			<small v-if="routesMsg" class="text-muted">{{ routesMsg }}</small>
+		</div>
+		<div class="d-flex gap-2">
+			<button @click="saveRoutedLANSubnets()"
+				:disabled="routesSaving"
+				class="btn btn-sm bg-primary-subtle border-primary-subtle text-primary-emphasis rounded-3 shadow">
+				<i class="bi bi-save-fill me-2"></i>
+				<LocaleText t="Save"></LocaleText>
+			</button>
+			<button @click="applyPolicyRoutes()"
+				:disabled="applying"
+				class="btn btn-sm bg-success-subtle border-success-subtle text-success-emphasis rounded-3 shadow ms-auto">
+				<span v-if="applying" class="spinner-border spinner-border-sm me-2"></span>
+				<i v-else class="bi bi-lightning-charge-fill me-2"></i>
+				<LocaleText t="Apply Now"></LocaleText>
+			</button>
+		</div>
+		<div v-if="applyResult" class="alert rounded-3 py-2 px-3 mb-0 mt-1"
+			:class="applyResult.ok ? 'alert-success' : 'alert-danger'">
+			<small>
+				<i class="bi" :class="applyResult.ok ? 'bi-check-circle-fill' : 'bi-x-circle-fill'"></i>
+				{{ applyResult.msg }}
+				<span v-if="applyResult.ok && applyResult.data">
+					(table {{ applyResult.data.tableId }})
+				</span>
+			</small>
 		</div>
 	</div>
 </div>
