@@ -1055,6 +1055,60 @@ def API_getAllGateways():
     return ResponseObject(True, data=gateways)
 
 
+@app.get(f'{APP_PREFIX}/api/getOPNsenseGatewayData/<configName>/<peerId>')
+def API_getOPNsenseGatewayData(configName: str, peerId: str):
+    """Rebuild OPNsense manual-setup data for an existing gateway peer."""
+    if configName not in WireguardConfigurations:
+        return ResponseObject(False, "Configuration does not exist")
+    wc = WireguardConfigurations[configName]
+    target = None
+    for p in wc.Peers:
+        if p.id == peerId:
+            target = p
+            break
+    if target is None:
+        return ResponseObject(False, "Peer not found")
+    # Take the first allowed_ip as the peer's tunnel IP (others are LAN subnets)
+    firstIp = (target.allowed_ip or '').split(',')[0].strip()
+    remoteEndpoint = DashboardConfig.GetConfig("Peers", "remote_endpoint")[1]
+    import ipaddress as _ipaddress
+    tunnelNetwork = ''
+    prefixLen = ''
+    for addr in (a.strip() for a in wc.Address.split(',')):
+        if not addr:
+            continue
+        try:
+            iface = _ipaddress.ip_interface(addr)
+            if iface.version == 4:
+                tunnelNetwork = str(iface.network)
+                prefixLen = str(iface.network.prefixlen)
+                break
+        except ValueError:
+            continue
+    if not tunnelNetwork:
+        tunnelNetwork = wc.Address.split(',')[0].strip()
+        prefixLen = tunnelNetwork.split('/')[1] if '/' in tunnelNetwork else '32'
+    if '/32' in firstIp:
+        clientTunnelAddress = firstIp.replace('/32', '/' + prefixLen)
+    elif '/' not in firstIp and firstIp:
+        clientTunnelAddress = f"{firstIp}/{prefixLen}"
+    else:
+        clientTunnelAddress = firstIp
+    return ResponseObject(True, data={
+        "configName": wc.Name,
+        "name": target.name,
+        "assignedIP": firstIp,
+        "clientTunnelAddress": clientTunnelAddress,
+        "tunnelNetwork": tunnelNetwork,
+        "serverPublicKey": wc.PublicKey,
+        "serverEndpoint": remoteEndpoint,
+        "serverPort": wc.ListenPort,
+        "keepalive": target.keepalive,
+        "publicKey": target.id,
+        "privateKey": target.private_key,
+    })
+
+
 @app.post(f'{APP_PREFIX}/api/setPeerGatewayFlag/<configName>')
 def API_setPeerGatewayFlag(configName: str):
     if configName not in WireguardConfigurations:
