@@ -43,7 +43,7 @@ export default {
 <template>
 	<div class="card shadow-sm rounded-3 peerCard"
 		 :id="'peer_'+Peer.id"
-		:class="{'border-warning': Peer.restricted}">
+		:class="{'border-warning': Peer.restricted, 'gateway-card': Peer.is_gateway}">
 		<div>
 			<div v-if="!Peer.restricted" class="card-header bg-transparent d-flex align-items-center gap-2 border-0">
 				<div class="dot ms-0" :class="{active: Peer.status === 'running'}"></div>
@@ -81,6 +81,9 @@ export default {
 		</div>
 		<div class="card-body pt-1" style="font-size: 0.9rem">
 			<h6>
+				<span v-if="Peer.is_gateway" class="badge bg-info-subtle text-info-emphasis rounded-3 me-1" title="Gateway">
+					<i class="bi bi-router"></i> GW
+				</span>
 				{{Peer.name ? Peer.name : GetLocale('Untitled Peer')}}
 			</h6>
 			<div class="d-flex"
@@ -149,5 +152,10 @@ export default {
 
 .peerCard:hover{
 	box-shadow: var(--bs-box-shadow) !important;
+}
+
+.gateway-card{
+	border-left: 3px solid var(--bs-info) !important;
+	background-color: rgba(13, 202, 240, 0.03);
 }
 </style>

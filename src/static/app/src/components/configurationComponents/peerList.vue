@@ -541,7 +541,7 @@ watch(() => route.query.id, (newValue) => {
 				</thead>
 				<tbody>
 					<tr v-for="peer in tableSortedPeers" :key="peer.id"
-						:class="{'table-warning': peer.restricted}"
+						:class="{'table-warning': peer.restricted, 'gateway-row': peer.is_gateway}"
 						role="button"
 						@click="configurationModals.peerSetting.modalOpen = true; configurationModalSelectedPeer = peer">
 						<td>
@@ -556,7 +556,12 @@ watch(() => route.query.id, (newValue) => {
 							</div>
 						</td>
 						<td>
-							<strong class="d-block" style="font-size: 0.85rem">{{ peer.name || 'Untitled' }}</strong>
+							<strong class="d-block" style="font-size: 0.85rem">
+								<span v-if="peer.is_gateway" class="badge bg-info-subtle text-info-emphasis rounded-3 me-1" title="Gateway" style="font-size: 0.65rem;">
+									<i class="bi bi-router"></i> GW
+								</span>
+								{{ peer.name || 'Untitled' }}
+							</strong>
 						</td>
 						<td><small><samp>{{ peer.allowed_ip }}</samp></small></td>
 						<td>
@@ -613,7 +618,7 @@ watch(() => route.query.id, (newValue) => {
 					</thead>
 					<tbody>
 						<tr v-for="peer in half" :key="peer.id"
-							:class="{'table-warning': peer.restricted}"
+							:class="{'table-warning': peer.restricted, 'gateway-row': peer.is_gateway}"
 							role="button"
 							@click="configurationModals.peerSetting.modalOpen = true; configurationModalSelectedPeer = peer">
 							<td style="padding: 0.25rem;">
@@ -622,7 +627,12 @@ watch(() => route.query.id, (newValue) => {
 								</span>
 							</td>
 							<td>
-								<strong style="font-size: 0.82rem;">{{ peer.name || 'Untitled' }}</strong>
+								<strong style="font-size: 0.82rem;">
+									<span v-if="peer.is_gateway" class="badge bg-info-subtle text-info-emphasis rounded-3 me-1" title="Gateway" style="font-size: 0.62rem;">
+										<i class="bi bi-router"></i> GW
+									</span>
+									{{ peer.name || 'Untitled' }}
+								</strong>
 							</td>
 							<td><small><samp>{{ peer.allowed_ip }}</samp></small></td>
 							<td>
@@ -771,6 +781,13 @@ watch(() => route.query.id, (newValue) => {
 
 th, td{
 	background-color: transparent !important;
+}
+
+tr.gateway-row > td:first-child {
+	box-shadow: inset 3px 0 0 0 var(--bs-info);
+}
+tr.gateway-row {
+	background-color: rgba(13, 202, 240, 0.04) !important;
 }
 
 @media screen and (max-width: 576px) {

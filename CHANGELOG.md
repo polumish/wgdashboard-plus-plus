@@ -5,6 +5,16 @@ All notable changes to WgDashboard++ will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to a custom versioning scheme: **X.YZ** where X=major, Y=feature (+0.1), Z=bugfix (+0.01).
 
+## [v1.1] - 2026-04-05
+
+### Added
+- **Gateways** aggregation view (new sidebar entry) — lists all gateway peers across every WireGuard configuration with filter, per-config counters, and click-to-jump to the peer's configuration
+- `is_gateway` flag on peers (with idempotent schema migration for existing DBs)
+- **"Add to ALL WireGuard networks"** toggle in OPNsense Gateway modal — creates a separate peer with fresh keys in each WG config (duplicate-peer model: full isolation, no cross-tunnel routing)
+- Multi-network result UI: per-network selector with Manual Setup + `.conf` tabs
+- Visual highlight for gateway peers: info-coloured "GW" badge and subtle left-border accent in Card, List, Grid, Table, and Columns views
+- New APIs: `GET /api/getAllGateways`, `POST /api/setPeerGatewayFlag/<configName>`
+
 ## [v1.02] - 2026-04-05
 
 ### Fixed
@@ -50,6 +60,7 @@ Initial release of WgDashboard++, forked from [WGDashboard v4.3.2](https://githu
 - Upstream watch — daily GitLab issues for upstream releases/commits
 - Cache-Control headers on HTML responses
 
+[v1.1]: https://github.com/polumish/wgdashboard-plus-plus/releases/tag/v1.1
 [v1.02]: https://github.com/polumish/wgdashboard-plus-plus/releases/tag/v1.02
 [v1.01]: https://github.com/polumish/wgdashboard-plus-plus/releases/tag/v1.01
 [v1.0]: https://github.com/polumish/wgdashboard-plus-plus/releases/tag/v1.0
