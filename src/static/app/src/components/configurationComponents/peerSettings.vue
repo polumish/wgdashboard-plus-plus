@@ -1,5 +1,5 @@
 <script>
-import {fetchPost, fetchGet} from "@/utilities/fetch.js";
+import {fetchPost} from "@/utilities/fetch.js";
 import {DashboardConfigurationStore} from "@/stores/DashboardConfigurationStore.js";
 import LocaleText from "@/components/text/localeText.vue";
 
@@ -75,7 +75,7 @@ export default {
 				return
 			}
 			this.opnsenseLoading = true
-			fetchGet(`/api/getOPNsenseGatewayData/${this.$route.params.id}/${encodeURIComponent(this.data.id)}`, {}, (res) => {
+			fetchPost(`/api/getOPNsenseGatewayData/${this.$route.params.id}`, {id: this.data.id}, (res) => {
 				this.opnsenseLoading = false
 				if (res.status){
 					this.opnsenseData = res.data

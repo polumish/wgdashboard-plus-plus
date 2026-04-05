@@ -1055,11 +1055,15 @@ def API_getAllGateways():
     return ResponseObject(True, data=gateways)
 
 
-@app.get(f'{APP_PREFIX}/api/getOPNsenseGatewayData/<configName>/<peerId>')
-def API_getOPNsenseGatewayData(configName: str, peerId: str):
+@app.post(f'{APP_PREFIX}/api/getOPNsenseGatewayData/<configName>')
+def API_getOPNsenseGatewayData(configName: str):
     """Rebuild OPNsense manual-setup data for an existing gateway peer."""
     if configName not in WireguardConfigurations:
         return ResponseObject(False, "Configuration does not exist")
+    data = request.get_json() or {}
+    peerId = data.get('id')
+    if not peerId:
+        return ResponseObject(False, "Peer id required")
     wc = WireguardConfigurations[configName]
     target = None
     for p in wc.Peers:
