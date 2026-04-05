@@ -36,6 +36,10 @@ class Peer:
         self.keepalive = tableData["keepalive"]
         self.remote_endpoint = tableData["remote_endpoint"]
         self.preshared_key = tableData["preshared_key"]
+        try:
+            self.is_gateway = bool(tableData["is_gateway"] or 0)
+        except (KeyError, LookupError):
+            self.is_gateway = False
         self.jobs: list[PeerJob] = []
         self.ShareLink: list[PeerShareLink] = []
         self.getJobs()

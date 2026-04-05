@@ -123,6 +123,14 @@ const router = createRouter({
 						}
 					]
 				},
+				{
+					name: "Gateways",
+					path: 'gateways',
+					component: () => import("@/views/gateways.vue"),
+					meta: {
+						title: "Gateways"
+					}
+				},
                 {
                     name: "Webhooks",
                     path: "webhooks",

@@ -914,28 +914,21 @@ def API_broadcastPeerAllowedIPs(configName: str):
     return ResponseObject(True, f"Updated {updated} peers" + (f", {errors} errors" if errors else ""),
                           data={"updated": updated, "errors": errors})
 
-@app.post(f'{APP_PREFIX}/api/addOPNsenseGateway/<configName>')
-def API_addOPNsenseGateway(configName: str):
-    if configName not in WireguardConfigurations:
-        return ResponseObject(False, "Configuration does not exist")
-    data = request.get_json()
-    name = data.get('name', 'OPNsense')
-    lanSubnets = data.get('lan_subnets', '')
-    keepalive = data.get('keepalive', 25)
-    wc = WireguardConfigurations[configName]
+def _createGatewayPeerInConfig(wc, name, lanSubnets, keepalive):
+    """Create a single gateway peer in one WG config. Returns (ok, dict_or_error)."""
     from modules.Utilities import GenerateWireguardPrivateKey, GenerateWireguardPublicKey
     privStatus, privateKey = GenerateWireguardPrivateKey()
     if not privStatus:
-        return ResponseObject(False, "Failed to generate WireGuard keys")
+        return False, "Failed to generate WireGuard keys"
     pubStatus, publicKey = GenerateWireguardPublicKey(privateKey)
     if not pubStatus:
-        return ResponseObject(False, "Failed to generate WireGuard keys")
+        return False, "Failed to generate WireGuard keys"
     ipStatus, availableIPs = wc.getAvailableIP(1)
     if not ipStatus or not availableIPs:
-        return ResponseObject(False, "No available IP addresses")
+        return False, "No available IP addresses"
     firstSubnet = list(availableIPs.keys())[0]
     if len(availableIPs[firstSubnet]) == 0:
-        return ResponseObject(False, "No available IP addresses")
+        return False, "No available IP addresses"
     assignedIP = availableIPs[firstSubnet][0]
     allowedIP = assignedIP
     if lanSubnets:
@@ -951,16 +944,15 @@ def API_addOPNsenseGateway(configName: str):
         "keepalive": keepalive,
         "preshared_key": "",
         "advanced_security": "off",
+        "is_gateway": 1,
     }
     status, peersAdded, msg = wc.addPeers([peer])
     if not status:
-        return ResponseObject(False, f"Failed to create peer: {msg}")
+        return False, f"Failed to create peer: {msg}"
     remoteEndpoint = DashboardConfig.GetConfig("Peers", "remote_endpoint")[1]
     listenPort = wc.ListenPort
     configPublicKey = wc.PublicKey
     import ipaddress as _ipaddress
-    # Compute the WG tunnel network (e.g. 10.200.0.0/24) from server Address.
-    # wc.Address may contain multiple comma-separated addresses (IPv4+IPv6).
     tunnelNetwork = ''
     prefixLen = ''
     for addr in (a.strip() for a in wc.Address.split(',')):
@@ -975,10 +967,8 @@ def API_addOPNsenseGateway(configName: str):
         except ValueError:
             continue
     if not tunnelNetwork:
-        # Fallback: take first token as-is
         tunnelNetwork = wc.Address.split(',')[0].strip()
         prefixLen = tunnelNetwork.split('/')[1] if '/' in tunnelNetwork else '32'
-    # Client-side tunnel address: replace /32 from peer IP with the actual WG prefix
     if '/32' in assignedIP:
         clientTunnelAddress = assignedIP.replace('/32', '/' + prefixLen)
     else:
@@ -994,7 +984,8 @@ Endpoint = {remoteEndpoint}:{listenPort}
 AllowedIPs = {tunnelNetwork}
 PersistentKeepalive = {keepalive}
 """
-    return ResponseObject(True, data={
+    return True, {
+        "configName": wc.Name,
         "peer": peersAdded[0] if peersAdded else None,
         "opnsenseConfig": opnsenseConfig,
         "assignedIP": assignedIP,
@@ -1006,7 +997,84 @@ PersistentKeepalive = {keepalive}
         "keepalive": keepalive,
         "publicKey": publicKey,
         "privateKey": privateKey,
-    })
+    }
+
+
+@app.post(f'{APP_PREFIX}/api/addOPNsenseGateway/<configName>')
+def API_addOPNsenseGateway(configName: str):
+    data = request.get_json() or {}
+    name = data.get('name', 'OPNsense')
+    lanSubnets = data.get('lan_subnets', '')
+    keepalive = data.get('keepalive', 25)
+    allConfigs = bool(data.get('all_configs', False))
+
+    if allConfigs:
+        results = []
+        errors = []
+        for cfgName, wc in WireguardConfigurations.items():
+            ok, res = _createGatewayPeerInConfig(wc, name, lanSubnets, keepalive)
+            if ok:
+                results.append(res)
+            else:
+                errors.append({"configName": cfgName, "error": res})
+        if not results:
+            return ResponseObject(False, "Failed to create gateway peer in any configuration",
+                                  data={"errors": errors})
+        return ResponseObject(True, data={"results": results, "errors": errors})
+
+    if configName not in WireguardConfigurations:
+        return ResponseObject(False, "Configuration does not exist")
+    wc = WireguardConfigurations[configName]
+    ok, res = _createGatewayPeerInConfig(wc, name, lanSubnets, keepalive)
+    if not ok:
+        return ResponseObject(False, res)
+    # Back-compat: keep flat shape for single-config response
+    return ResponseObject(True, data=res)
+
+
+@app.get(f'{APP_PREFIX}/api/getAllGateways')
+def API_getAllGateways():
+    gateways = []
+    for cfgName, wc in WireguardConfigurations.items():
+        for p in wc.Peers:
+            if getattr(p, 'is_gateway', False):
+                gateways.append({
+                    "configName": cfgName,
+                    "id": p.id,
+                    "name": p.name,
+                    "allowed_ip": p.allowed_ip,
+                    "endpoint_allowed_ip": p.endpoint_allowed_ip,
+                    "status": p.status,
+                    "latest_handshake": p.latest_handshake,
+                    "endpoint": p.endpoint,
+                    "total_receive": p.total_receive,
+                    "total_sent": p.total_sent,
+                    "cumu_receive": p.cumu_receive,
+                    "cumu_sent": p.cumu_sent,
+                })
+    return ResponseObject(True, data=gateways)
+
+
+@app.post(f'{APP_PREFIX}/api/setPeerGatewayFlag/<configName>')
+def API_setPeerGatewayFlag(configName: str):
+    if configName not in WireguardConfigurations:
+        return ResponseObject(False, "Configuration does not exist")
+    data = request.get_json() or {}
+    peerId = data.get('id')
+    flag = 1 if data.get('is_gateway') else 0
+    if not peerId:
+        return ResponseObject(False, "Peer id required")
+    wc = WireguardConfigurations[configName]
+    try:
+        with wc.engine.begin() as conn:
+            conn.execute(
+                wc.peersTable.update().values({"is_gateway": flag})
+                .where(wc.peersTable.c.id == peerId)
+            )
+        wc.getPeers()
+        return ResponseObject(True, f"Updated is_gateway={flag}")
+    except Exception as e:
+        return ResponseObject(False, f"Failed: {e}")
 
 @app.post(f'{APP_PREFIX}/api/addPeers/<configName>')
 def API_addPeers(configName):

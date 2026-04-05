@@ -1,5 +1,5 @@
 <script setup>
-import {ref} from "vue";
+import {ref, computed} from "vue";
 import {fetchPost} from "@/utilities/fetch.js";
 import {DashboardConfigurationStore} from "@/stores/DashboardConfigurationStore.js";
 import LocaleText from "@/components/text/localeText.vue";
@@ -12,12 +12,21 @@ const emits = defineEmits(['close', 'added'])
 const form = ref({
 	name: '',
 	lan_subnets: '',
-	keepalive: 25
+	keepalive: 25,
+	all_configs: false
 })
 
 const submitting = ref(false)
 const result = ref(null)
 const activeTab = ref('manual')
+const selectedConfigIdx = ref(0)
+
+const results = computed(() => {
+	if (!result.value) return []
+	if (result.value.results) return result.value.results
+	return [result.value]
+})
+const activeResult = computed(() => results.value[selectedConfigIdx.value] || results.value[0])
 
 const submit = async () => {
 	if (!form.value.name) {
@@ -43,11 +52,13 @@ const copyToClipboard = (text) => {
 }
 
 const downloadConf = () => {
-	const blob = new Blob([result.value.opnsenseConfig], {type: 'text/plain'})
+	const r = activeResult.value
+	const blob = new Blob([r.opnsenseConfig], {type: 'text/plain'})
 	const url = URL.createObjectURL(blob)
 	const a = document.createElement('a')
 	a.href = url
-	a.download = `${form.value.name || 'opnsense'}.conf`
+	const suffix = r.configName ? `_${r.configName}` : ''
+	a.download = `${form.value.name || 'opnsense'}${suffix}.conf`
 	a.click()
 	URL.revokeObjectURL(url)
 }
@@ -94,6 +105,16 @@ const close = () => {
 							<input type="number" class="form-control rounded-3"
 								   v-model.number="form.keepalive" min="0" max="65535">
 						</div>
+						<div class="form-check form-switch">
+							<input class="form-check-input" type="checkbox" role="switch"
+								   id="allConfigsSwitch" v-model="form.all_configs">
+							<label class="form-check-label" for="allConfigsSwitch">
+								<LocaleText t="Add to ALL WireGuard networks"></LocaleText>
+							</label>
+							<div><small class="text-muted">
+								<LocaleText t="Creates a separate peer with fresh keys in each WG config. OPNsense side will need one WG instance per network (full isolation between networks)."></LocaleText>
+							</small></div>
+						</div>
 						<button class="btn btn-primary rounded-3 w-100"
 								:disabled="submitting || !form.name"
 								@click="submit()">
@@ -107,9 +128,22 @@ const close = () => {
 				<div class="card-body px-4 pb-4" v-else>
 					<div class="alert alert-success rounded-3 d-flex align-items-center mb-3">
 						<i class="bi bi-check-circle-fill me-2"></i>
-						<small>
-							Gateway peer created. IP: <strong>{{ result.assignedIP }}</strong>
+						<small v-if="results.length > 1">
+							Created <strong>{{ results.length }}</strong> gateway peers across all networks.
 						</small>
+						<small v-else>
+							Gateway peer created. IP: <strong>{{ activeResult.assignedIP }}</strong>
+						</small>
+					</div>
+
+					<!-- Config selector (multi-network mode) -->
+					<div v-if="results.length > 1" class="mb-3">
+						<label class="form-label mb-1"><small class="text-muted"><LocaleText t="Select network to view"></LocaleText></small></label>
+						<select class="form-select form-select-sm rounded-3" v-model.number="selectedConfigIdx">
+							<option v-for="(r, i) in results" :key="r.configName" :value="i">
+								{{ r.configName }} — {{ r.assignedIP }}
+							</option>
+						</select>
 					</div>
 
 					<!-- Tabs -->
@@ -151,22 +185,22 @@ const close = () => {
 							</div>
 							<div class="row g-2 mb-2">
 								<div class="col-4 text-muted">Public Key</div>
-								<div class="col-8"><code class="text-break">{{ result.serverPublicKey }}</code>
-									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(result.serverPublicKey)"></i></div>
+								<div class="col-8"><code class="text-break">{{ activeResult.serverPublicKey }}</code>
+									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(activeResult.serverPublicKey)"></i></div>
 							</div>
 							<div class="row g-2 mb-2">
 								<div class="col-4 text-muted">Allowed IPs</div>
-								<div class="col-8"><code>{{ result.tunnelNetwork }}</code>
-									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(result.tunnelNetwork)"></i></div>
+								<div class="col-8"><code>{{ activeResult.tunnelNetwork }}</code>
+									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(activeResult.tunnelNetwork)"></i></div>
 							</div>
 							<div class="row g-2 mb-2">
 								<div class="col-4 text-muted">Endpoint</div>
-								<div class="col-8"><code>{{ result.serverEndpoint }}:{{ result.serverPort }}</code>
-									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(result.serverEndpoint + ':' + result.serverPort)"></i></div>
+								<div class="col-8"><code>{{ activeResult.serverEndpoint }}:{{ activeResult.serverPort }}</code>
+									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(activeResult.serverEndpoint + ':' + activeResult.serverPort)"></i></div>
 							</div>
 							<div class="row g-2">
 								<div class="col-4 text-muted">Keepalive</div>
-								<div class="col-8"><code>{{ result.keepalive }}</code></div>
+								<div class="col-8"><code>{{ activeResult.keepalive }}</code></div>
 							</div>
 						</div>
 
@@ -179,18 +213,18 @@ const close = () => {
 							</div>
 							<div class="row g-2 mb-2">
 								<div class="col-4 text-muted">Public Key</div>
-								<div class="col-8"><code class="text-break">{{ result.publicKey }}</code>
-									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(result.publicKey)"></i></div>
+								<div class="col-8"><code class="text-break">{{ activeResult.publicKey }}</code>
+									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(activeResult.publicKey)"></i></div>
 							</div>
 							<div class="row g-2 mb-2">
 								<div class="col-4 text-muted">Private Key</div>
-								<div class="col-8"><code class="text-break">{{ result.privateKey }}</code>
-									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(result.privateKey)"></i></div>
+								<div class="col-8"><code class="text-break">{{ activeResult.privateKey }}</code>
+									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(activeResult.privateKey)"></i></div>
 							</div>
 							<div class="row g-2 mb-2">
 								<div class="col-4 text-muted">Tunnel Address</div>
-								<div class="col-8"><code>{{ result.clientTunnelAddress }}</code>
-									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(result.clientTunnelAddress)"></i></div>
+								<div class="col-8"><code>{{ activeResult.clientTunnelAddress }}</code>
+									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(activeResult.clientTunnelAddress)"></i></div>
 							</div>
 							<div class="row g-2 mb-2">
 								<div class="col-4 text-muted">Listen Port</div>
@@ -215,10 +249,10 @@ const close = () => {
 							<small><LocaleText t="Standard wg-quick config — also usable with wg-quick up"></LocaleText></small>
 						</p>
 						<pre class="bg-body-tertiary p-3 rounded-3 border"
-							 style="max-height: 300px; overflow-y: auto; font-size: 0.8rem; white-space: pre-wrap;">{{ result.opnsenseConfig }}</pre>
+							 style="max-height: 300px; overflow-y: auto; font-size: 0.8rem; white-space: pre-wrap;">{{ activeResult.opnsenseConfig }}</pre>
 						<div class="d-flex gap-2">
 							<button class="btn btn-sm bg-primary-subtle text-primary-emphasis rounded-3"
-									@click="copyToClipboard(result.opnsenseConfig)">
+									@click="copyToClipboard(activeResult.opnsenseConfig)">
 								<i class="bi bi-clipboard me-1"></i> <LocaleText t="Copy"></LocaleText>
 							</button>
 							<button class="btn btn-sm bg-success-subtle text-success-emphasis rounded-3"
