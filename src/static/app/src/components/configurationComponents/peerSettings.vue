@@ -17,7 +17,10 @@ export default {
 			saving: false,
 			opnsenseData: null,
 			opnsenseVisible: false,
-			opnsenseLoading: false
+			opnsenseLoading: false,
+			editingPort: false,
+			portEditValue: 0,
+			portSaving: false
 		}
 	},
 	setup(){
@@ -80,6 +83,30 @@ export default {
 				if (res.status){
 					this.opnsenseData = res.data
 					this.opnsenseVisible = true
+				}else{
+					this.dashboardConfigurationStore.newMessage("Server", res.message, "danger")
+				}
+			})
+		},
+		startEditPort(){
+			this.portEditValue = this.opnsenseData.opnsenseListenPort || 51820
+			this.editingPort = true
+		},
+		savePort(){
+			const p = parseInt(this.portEditValue)
+			if (!p || p < 1 || p > 65535){
+				this.dashboardConfigurationStore.newMessage("WGDashboard", "Port must be 1-65535", "warning")
+				return
+			}
+			this.portSaving = true
+			fetchPost(`/api/setOpnsenseListenPort/${this.$route.params.id}`, {
+				id: this.data.id, port: p
+			}, (res) => {
+				this.portSaving = false
+				if (res.status){
+					this.opnsenseData.opnsenseListenPort = p
+					this.editingPort = false
+					this.dashboardConfigurationStore.newMessage("Server", `Listen port updated to ${p}`, "success")
 				}else{
 					this.dashboardConfigurationStore.newMessage("Server", res.message, "danger")
 				}
@@ -323,7 +350,34 @@ export default {
 									<div class="row g-2 mb-2"><div class="col-4 text-muted">Name</div><div class="col-8"><code>{{ this.opnsenseData.name }}</code> <i class="bi bi-clipboard ms-2" role="button" @click="this.copyToClipboard(this.opnsenseData.name)"></i></div></div>
 									<div class="row g-2 mb-2"><div class="col-4 text-muted">Public key</div><div class="col-8"><code class="text-break">{{ this.opnsenseData.publicKey }}</code> <i class="bi bi-clipboard ms-2" role="button" @click="this.copyToClipboard(this.opnsenseData.publicKey)"></i></div></div>
 									<div class="row g-2 mb-2"><div class="col-4 text-muted">Private key</div><div class="col-8"><code class="text-break">{{ this.opnsenseData.privateKey }}</code> <i class="bi bi-clipboard ms-2" role="button" @click="this.copyToClipboard(this.opnsenseData.privateKey)"></i></div></div>
-									<div class="row g-2 mb-2"><div class="col-4 text-muted">Listen port</div><div class="col-8"><code>{{ this.opnsenseData.opnsenseListenPort || 51820 }}</code> <i class="bi bi-clipboard ms-2" role="button" @click="this.copyToClipboard(String(this.opnsenseData.opnsenseListenPort || 51820))"></i></div></div>
+									<div class="row g-2 mb-2">
+									<div class="col-4 text-muted">Listen port</div>
+									<div class="col-8">
+										<template v-if="!this.editingPort">
+											<code>{{ this.opnsenseData.opnsenseListenPort || 51820 }}</code>
+											<i class="bi bi-clipboard ms-2" role="button" @click="this.copyToClipboard(String(this.opnsenseData.opnsenseListenPort || 51820))"></i>
+											<i class="bi bi-pencil ms-2" role="button" title="Edit" @click="this.startEditPort()"></i>
+										</template>
+										<template v-else>
+											<input type="number" class="form-control form-control-sm rounded-3 d-inline-block"
+												style="width: 100px;" min="1" max="65535"
+												v-model.number="this.portEditValue"
+												@keyup.enter="this.savePort()"
+												@keyup.esc="this.editingPort = false"
+												:disabled="this.portSaving">
+											<button class="btn btn-sm btn-primary rounded-3 ms-1"
+												:disabled="this.portSaving"
+												@click="this.savePort()">
+												<i class="bi bi-check"></i>
+											</button>
+											<button class="btn btn-sm btn-body rounded-3 ms-1"
+												:disabled="this.portSaving"
+												@click="this.editingPort = false">
+												<i class="bi bi-x"></i>
+											</button>
+										</template>
+									</div>
+								</div>
 									<div class="row g-2 mb-2"><div class="col-4 text-muted">Tunnel address</div><div class="col-8"><code>{{ this.opnsenseData.clientTunnelAddress }}</code> <i class="bi bi-clipboard ms-2" role="button" @click="this.copyToClipboard(this.opnsenseData.clientTunnelAddress)"></i></div></div>
 									<div class="row g-2 mb-2"><div class="col-4 text-muted">Peers</div><div class="col-8"><code>{{ this.opnsenseData.name }}-server</code> <small class="text-muted ms-2">(select from dropdown)</small></div></div>
 									<div class="row g-2"><div class="col-4 text-muted">Disable routes</div><div class="col-8"><i class="bi bi-check-square"></i></div></div>

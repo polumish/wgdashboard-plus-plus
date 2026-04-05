@@ -1141,6 +1141,33 @@ def API_getOPNsenseGatewayData(configName: str):
     })
 
 
+@app.post(f'{APP_PREFIX}/api/setOpnsenseListenPort/<configName>')
+def API_setOpnsenseListenPort(configName: str):
+    if configName not in WireguardConfigurations:
+        return ResponseObject(False, "Configuration does not exist")
+    data = request.get_json() or {}
+    peerId = data.get('id')
+    try:
+        port = int(data.get('port') or 0)
+    except (TypeError, ValueError):
+        return ResponseObject(False, "Port must be an integer")
+    if not peerId:
+        return ResponseObject(False, "Peer id required")
+    if port < 1 or port > 65535:
+        return ResponseObject(False, "Port must be between 1 and 65535")
+    wc = WireguardConfigurations[configName]
+    try:
+        with wc.engine.begin() as conn:
+            conn.execute(
+                wc.peersTable.update().values({"opnsense_listen_port": port})
+                .where(wc.peersTable.c.id == peerId)
+            )
+        wc.getPeers()
+        return ResponseObject(True, f"Updated listen port to {port}", data={"port": port})
+    except Exception as e:
+        return ResponseObject(False, f"Failed: {e}")
+
+
 @app.post(f'{APP_PREFIX}/api/setPeerGatewayFlag/<configName>')
 def API_setPeerGatewayFlag(configName: str):
     if configName not in WireguardConfigurations:
