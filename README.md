@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-    <a href="https://github.com/polumish/wgdashboard-plus-plus/releases"><img src="https://img.shields.io/badge/Release_Notes-v1.0-brightgreen?style=for-the-badge"></a>
+    <a href="https://github.com/polumish/wgdashboard-plus-plus/releases"><img src="https://img.shields.io/badge/Release_Notes-v1.2-brightgreen?style=for-the-badge"></a>
     <a href="https://github.com/polumish/wgdashboard-plus-plus/discussions"><img src="https://img.shields.io/badge/Discussions-welcome-purple?style=for-the-badge&logo=github"></a>
     <a href="https://git.half.net.ua/polumish/wgdashboard-plus-plus/-/issues"><img src="https://img.shields.io/badge/Bug_Reports-welcome-orange?style=for-the-badge&logo=gitlab"></a>
 </p>
@@ -86,14 +86,16 @@ WgDashboard++ uses its own versioning independent of upstream:
 - **Y** — feature releases (+0.1)
 - **Z** — bugfixes (+0.01)
 
-Current: **v1.0**
+Current: **v1.2**
 
 ## Feature Status
 
 | Feature | Status |
 |---------|--------|
 | Client portal, trusted IPs, density, dual-column view | ✅ Stable |
-| OPNsense Gateway integration | ⚠️ **Alpha** — testing only, please [report issues](https://git.half.net.ua/polumish/wgdashboard-plus-plus/-/issues) |
+| OPNsense Gateway integration (v1.2) | ✅ Stable — Manual Setup 1:1 with OPNsense UI, auto port assignment, multi-network duplicate-peer mode |
+| Gateways aggregation view | ✅ Stable |
+| Routed LAN Subnets / Apply Now policy routing | ✅ Stable |
 
 ## Deployment
 

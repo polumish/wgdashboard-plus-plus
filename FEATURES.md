@@ -13,13 +13,24 @@ Custom features added on top of [WGDashboard v4.3.2](https://github.com/WGDashbo
   - Download peer configuration files
 - **Managed Configurations View** — Dedicated client portal page listing all configurations where the client has manager access
 
-## OPNsense Integration
+## Gateway Management
 
-- **Add OPNsense Gateway** — One-click button to create a gateway peer with LAN subnets behind it
-  - Generates ready-to-paste WireGuard configuration
-  - Generates OPNsense XML for System > Configuration > Import
-  - Automatically assigns IP and configures AllowedIPs
+- **Add OPNsense Gateway** — One-click workflow that creates a gateway peer with LAN subnets behind it
+  - Generates ready-to-paste WireGuard configuration for reference
+  - **Manual Setup panel** with field names matching the OPNsense GUI 1:1 (Peers → Add peer → Name, Public key, Allowed IPs, Endpoint address/port, Keepalive interval; Instances → Add instance → Name, Public/Private key, Listen port, Tunnel address, Peers, Disable routes)
+  - Numbered step badges point to the exact OPNsense menu path
+  - Per-field copy buttons
+- **Add to ALL WireGuard networks** toggle — creates a separate peer with fresh keys in each WG config (duplicate-peer model for full network isolation)
+- **Auto-pick Listen Port** — the next free UDP port is suggested automatically (starts at 51820) to avoid collisions between multiple OPNsense Instances on the same box. Editable inline in Peer Settings for legacy peers
+- **is_gateway flag** on peers with a dedicated **Gateways** aggregation page in the sidebar — filter, per-config counters, click-to-jump to the peer's config
+- **Show OPNsense Setup (manual values)** — reopen Manual Setup data for any existing gateway peer at any time
+- **Mark as Gateway** toggle in Peer Settings — promote any existing peer to gateway status
+- **Visual highlight** — gateway peers get a "GW" info badge and subtle left-border accent in all views (Card/List/Grid/Table/Columns)
 - **Broadcast AllowedIPs** — Push a gateway peer's AllowedIPs (subnets behind it) to all other peers in the same configuration, so clients can reach servers behind OPNsense
+
+## Network Routing
+
+- **Routed LAN Subnets** per configuration (`Edit Configuration` → `Routed LAN Subnets`) — declare which LANs are reachable via this WG tunnel and install server-side policy routing with one **Apply Now** click. Creates `ip rule from <config_subnet> table <id>` + routes via the config's interface. Deterministic routing table id per config, idempotent. Keeps each WG network's routing independent of other tunnels sharing the same host
 
 ## Security
 

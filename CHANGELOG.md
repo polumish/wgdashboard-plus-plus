@@ -5,6 +5,19 @@ All notable changes to WgDashboard++ will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to a custom versioning scheme: **X.YZ** where X=major, Y=feature (+0.1), Z=bugfix (+0.01).
 
+## [v1.2] - 2026-04-05
+
+### Added
+- **Routed LAN Subnets** per configuration (`Edit Configuration` → new section) — declare which LANs are reachable via a WG tunnel and apply server-side policy routing with one click. Installs `ip rule from <config_subnet> table <id>` + routes via the config's interface. Deterministic table id (100-252) derived from config name, idempotent Apply
+- Auto-pick next free **OPNsense Listen Port** when creating a gateway peer (starts at 51820, scans all gateway peers across configs)
+- **Inline edit** of OPNsense Listen Port for existing gateway peers (pencil icon in Show OPNsense Setup panel)
+- **Show OPNsense Setup (manual values)** button in Peer Settings — retrieve Manual Setup values for any existing gateway peer (not only at creation time)
+- Manual Setup field names now match the OPNsense GUI **1:1** (Enabled, Name, Public key, Pre-shared key, Allowed IPs, Endpoint address, Endpoint port, Instances, Keepalive interval / Private key, Listen port, Tunnel address, Peers, Disable routes) with numbered step badges pointing to `VPN → WireGuard → Peers` then `Instances`
+
+### Fixed
+- **Portal logout bug when peer id contained `/`** — WireGuard public keys are base64 with `/`, `+`, `=`. The GET endpoint for "Show OPNsense Setup" had `<peerId>` in its path and Flask's route converter rejected the slash → 404 → frontend redirected to signin. Switched to POST with `{id}` in JSON body
+- **Portal logout bug on opening orphaned configs** — deleted configurations left partial state behind (orphan `ConfigurationsInfo` row + `_history_endpoint` table). Opening such a config crashed `getRestrictedPeers()` with `sqlite3.OperationalError: no such table` → HTTP 500 → frontend interpreted as session loss → logout. Fixed `deleteConfiguration()` to drop all per-config tables (including `_history_endpoint`) independently with `DROP TABLE IF EXISTS` and to remove the `ConfigurationsInfo` row. Added defensive `OperationalError` handling in `getPeers()` / `getRestrictedPeers()` so any future orphan just shows an empty list
+
 ## [v1.1] - 2026-04-05
 
 ### Added
@@ -60,6 +73,7 @@ Initial release of WgDashboard++, forked from [WGDashboard v4.3.2](https://githu
 - Upstream watch — daily GitLab issues for upstream releases/commits
 - Cache-Control headers on HTML responses
 
+[v1.2]: https://github.com/polumish/wgdashboard-plus-plus/releases/tag/v1.2
 [v1.1]: https://github.com/polumish/wgdashboard-plus-plus/releases/tag/v1.1
 [v1.02]: https://github.com/polumish/wgdashboard-plus-plus/releases/tag/v1.02
 [v1.01]: https://github.com/polumish/wgdashboard-plus-plus/releases/tag/v1.01
