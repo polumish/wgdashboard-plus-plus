@@ -636,9 +636,23 @@ watch(() => route.query.id, (newValue) => {
 									<button class="btn btn-sm btn-body rounded-3" data-bs-toggle="dropdown" data-bs-display="static">
 										<i class="bi bi-three-dots-vertical"></i>
 									</button>
-									<ul class="dropdown-menu dropdown-menu-end rounded-3 shadow" style="min-width: 180px;">
+									<ul class="dropdown-menu dropdown-menu-end rounded-3 shadow" style="min-width: 200px;">
+										<template v-if="peer.private_key">
+											<li class="d-flex px-2 gap-1">
+												<button class="btn btn-sm btn-body rounded-3 flex-fill" title="Download" @click="tableDownloadPeer(peer)"><i class="bi bi-download"></i></button>
+												<button class="btn btn-sm btn-body rounded-3 flex-fill" title="QR Code" @click="configurationModalSelectedPeer = peer; configurationModals.peerQRCode.modalOpen = true"><i class="bi bi-qr-code"></i></button>
+												<button class="btn btn-sm btn-body rounded-3 flex-fill" title="Config File" @click="configurationModalSelectedPeer = peer; configurationModals.peerConfigurationFile.modalOpen = true"><i class="bi bi-body-text"></i></button>
+												<button class="btn btn-sm btn-body rounded-3 flex-fill" title="Share" @click="configurationModals.peerShare.modalOpen = true; configurationModalSelectedPeer = peer"><i class="bi bi-share"></i></button>
+											</li>
+											<li><hr class="dropdown-divider"></li>
+										</template>
+										<template v-else>
+											<li><small class="dropdown-item text-muted" style="white-space: break-spaces; font-size: 0.7rem"><LocaleText t="Download & QR Code is not available due to no private key set for this peer"></LocaleText></small></li>
+										</template>
 										<li><a class="dropdown-item d-flex" role="button" @click="configurationModals.peerSetting.modalOpen = true; configurationModalSelectedPeer = peer"><i class="me-auto bi bi-pen"></i> <LocaleText t="Peer Settings"></LocaleText></a></li>
 										<li><a class="dropdown-item d-flex" role="button" @click="configurationModals.peerScheduleJobs.modalOpen = true; configurationModalSelectedPeer = peer"><i class="me-auto bi bi-app-indicator"></i> <LocaleText t="Schedule Jobs"></LocaleText></a></li>
+										<li><a class="dropdown-item d-flex" role="button" @click="configurationModalSelectedPeer = peer; configurationModals.assignPeer.modalOpen = true"><i class="me-auto bi bi-diagram-2"></i> <LocaleText t="Assign Peer"></LocaleText></a></li>
+										<li><a class="dropdown-item d-flex" role="button" @click="tableBroadcastAllowedIPs(peer)"><i class="me-auto bi bi-broadcast"></i> <LocaleText t="Broadcast AllowedIPs"></LocaleText></a></li>
 										<li><hr class="dropdown-divider"></li>
 										<li><a class="dropdown-item d-flex text-warning" role="button" @click="tableRestrictPeer(peer)"><i class="me-auto bi bi-lock"></i> <LocaleText t="Restrict Access"></LocaleText></a></li>
 										<li><a class="dropdown-item d-flex text-danger fw-bold" role="button" @click="tableDeletePeer(peer)"><i class="me-auto bi bi-trash"></i> <LocaleText t="Delete"></LocaleText></a></li>
