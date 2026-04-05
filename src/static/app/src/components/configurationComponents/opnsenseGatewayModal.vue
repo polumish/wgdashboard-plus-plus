@@ -205,8 +205,14 @@ const close = () => {
 
 					<!-- Config tab -->
 					<div v-if="activeTab === 'config'">
+						<div class="alert alert-info rounded-3 py-2 px-3 mb-2">
+							<small>
+								<i class="bi bi-info-circle-fill me-1"></i>
+								<LocaleText t="OPNsense 23.7+: import via VPN → WireGuard → Instances → Import (paste this config). Do NOT use System → Configuration → Backup/Restore."></LocaleText>
+							</small>
+						</div>
 						<p class="text-muted mb-2">
-							<small><LocaleText t="Standard wg-quick config (for reference or wg-quick up)"></LocaleText></small>
+							<small><LocaleText t="Standard wg-quick config — also usable with wg-quick up"></LocaleText></small>
 						</p>
 						<pre class="bg-body-tertiary p-3 rounded-3 border"
 							 style="max-height: 300px; overflow-y: auto; font-size: 0.8rem; white-space: pre-wrap;">{{ result.opnsenseConfig }}</pre>
