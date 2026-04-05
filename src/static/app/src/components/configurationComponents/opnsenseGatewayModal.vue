@@ -1,6 +1,6 @@
 <script setup>
-import {ref, computed} from "vue";
-import {fetchPost} from "@/utilities/fetch.js";
+import {ref, computed, onMounted} from "vue";
+import {fetchPost, fetchGet} from "@/utilities/fetch.js";
 import {DashboardConfigurationStore} from "@/stores/DashboardConfigurationStore.js";
 import LocaleText from "@/components/text/localeText.vue";
 import {useRoute} from "vue-router";
@@ -13,7 +13,16 @@ const form = ref({
 	name: '',
 	lan_subnets: '',
 	keepalive: 25,
-	all_configs: false
+	all_configs: false,
+	opnsense_listen_port: 51820
+})
+
+onMounted(() => {
+	fetchGet('/api/getNextOpnsenseListenPort', {}, (res) => {
+		if (res.status && res.data && res.data.port) {
+			form.value.opnsense_listen_port = res.data.port
+		}
+	})
 })
 
 const submitting = ref(false)
@@ -104,6 +113,15 @@ const close = () => {
 							<label class="form-label"><LocaleText t="Persistent Keepalive"></LocaleText></label>
 							<input type="number" class="form-control rounded-3"
 								   v-model.number="form.keepalive" min="0" max="65535">
+						</div>
+						<div>
+							<label class="form-label"><LocaleText t="OPNsense Listen Port"></LocaleText></label>
+							<input type="number" class="form-control rounded-3"
+								   v-model.number="form.opnsense_listen_port" min="1" max="65535"
+								   :disabled="form.all_configs">
+							<small class="text-muted">
+								<LocaleText t="UDP port the OPNsense WireGuard Instance will listen on. Auto-incremented from other gateways. Each instance on one OPNsense needs a unique port."></LocaleText>
+							</small>
 						</div>
 						<div class="form-check form-switch">
 							<input class="form-check-input" type="checkbox" role="switch"
@@ -248,8 +266,8 @@ const close = () => {
 							</div>
 							<div class="row g-2 mb-2">
 								<div class="col-4 text-muted">Listen port</div>
-								<div class="col-8"><code>51820</code>
-									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard('51820')"></i></div>
+								<div class="col-8"><code>{{ activeResult.opnsenseListenPort || 51820 }}</code>
+									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(String(activeResult.opnsenseListenPort || 51820))"></i></div>
 							</div>
 							<div class="row g-2 mb-2">
 								<div class="col-4 text-muted">Tunnel address</div>

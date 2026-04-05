@@ -40,6 +40,10 @@ class Peer:
             self.is_gateway = bool(tableData["is_gateway"] or 0)
         except (KeyError, LookupError):
             self.is_gateway = False
+        try:
+            self.opnsense_listen_port = int(tableData["opnsense_listen_port"] or 0)
+        except (KeyError, LookupError, TypeError, ValueError):
+            self.opnsense_listen_port = 0
         self.jobs: list[PeerJob] = []
         self.ShareLink: list[PeerShareLink] = []
         self.getJobs()

@@ -914,7 +914,24 @@ def API_broadcastPeerAllowedIPs(configName: str):
     return ResponseObject(True, f"Updated {updated} peers" + (f", {errors} errors" if errors else ""),
                           data={"updated": updated, "errors": errors})
 
-def _createGatewayPeerInConfig(wc, name, lanSubnets, keepalive):
+def _nextOpnsenseListenPort():
+    """Next free OPNsense-side listen port across all gateway peers.
+    Scans every peer in every WG config, takes max(opnsense_listen_port)+1,
+    starting from 51820."""
+    base = 51820
+    used = {base - 1}
+    for _cfgName, _wc in WireguardConfigurations.items():
+        for _p in _wc.Peers:
+            try:
+                port = getattr(_p, 'opnsense_listen_port', 0) or 0
+            except Exception:
+                port = 0
+            if port:
+                used.add(int(port))
+    return max(used) + 1
+
+
+def _createGatewayPeerInConfig(wc, name, lanSubnets, keepalive, listenPortOverride=None):
     """Create a single gateway peer in one WG config. Returns (ok, dict_or_error)."""
     from modules.Utilities import GenerateWireguardPrivateKey, GenerateWireguardPublicKey
     privStatus, privateKey = GenerateWireguardPrivateKey()
@@ -933,6 +950,7 @@ def _createGatewayPeerInConfig(wc, name, lanSubnets, keepalive):
     allowedIP = assignedIP
     if lanSubnets:
         allowedIP = assignedIP + ', ' + lanSubnets
+    opnsensePort = int(listenPortOverride) if listenPortOverride else _nextOpnsenseListenPort()
     peer = {
         "id": publicKey,
         "private_key": privateKey,
@@ -945,6 +963,7 @@ def _createGatewayPeerInConfig(wc, name, lanSubnets, keepalive):
         "preshared_key": "",
         "advanced_security": "off",
         "is_gateway": 1,
+        "opnsense_listen_port": opnsensePort,
     }
     status, peersAdded, msg = wc.addPeers([peer])
     if not status:
@@ -976,7 +995,7 @@ def _createGatewayPeerInConfig(wc, name, lanSubnets, keepalive):
     opnsenseConfig = f"""[Interface]
 PrivateKey = {privateKey}
 Address = {clientTunnelAddress}
-ListenPort = 51820
+ListenPort = {opnsensePort}
 
 [Peer]
 PublicKey = {configPublicKey}
@@ -997,6 +1016,7 @@ PersistentKeepalive = {keepalive}
         "keepalive": keepalive,
         "publicKey": publicKey,
         "privateKey": privateKey,
+        "opnsenseListenPort": opnsensePort,
     }
 
 
@@ -1007,11 +1027,13 @@ def API_addOPNsenseGateway(configName: str):
     lanSubnets = data.get('lan_subnets', '')
     keepalive = data.get('keepalive', 25)
     allConfigs = bool(data.get('all_configs', False))
+    listenPortOverride = data.get('opnsense_listen_port') or None
 
     if allConfigs:
         results = []
         errors = []
         for cfgName, wc in WireguardConfigurations.items():
+            # For all-configs mode, always auto-increment (ignore override to avoid collisions)
             ok, res = _createGatewayPeerInConfig(wc, name, lanSubnets, keepalive)
             if ok:
                 results.append(res)
@@ -1025,11 +1047,16 @@ def API_addOPNsenseGateway(configName: str):
     if configName not in WireguardConfigurations:
         return ResponseObject(False, "Configuration does not exist")
     wc = WireguardConfigurations[configName]
-    ok, res = _createGatewayPeerInConfig(wc, name, lanSubnets, keepalive)
+    ok, res = _createGatewayPeerInConfig(wc, name, lanSubnets, keepalive, listenPortOverride)
     if not ok:
         return ResponseObject(False, res)
     # Back-compat: keep flat shape for single-config response
     return ResponseObject(True, data=res)
+
+
+@app.get(f'{APP_PREFIX}/api/getNextOpnsenseListenPort')
+def API_getNextOpnsenseListenPort():
+    return ResponseObject(True, data={"port": _nextOpnsenseListenPort()})
 
 
 @app.get(f'{APP_PREFIX}/api/getAllGateways')
@@ -1110,6 +1137,7 @@ def API_getOPNsenseGatewayData(configName: str):
         "keepalive": target.keepalive,
         "publicKey": target.id,
         "privateKey": target.private_key,
+        "opnsenseListenPort": getattr(target, 'opnsense_listen_port', 0) or 51820,
     })
 
 

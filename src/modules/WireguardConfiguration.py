@@ -256,6 +256,7 @@ class WireguardConfiguration:
             sqlalchemy.Column('remote_endpoint', sqlalchemy.String(255)),
             sqlalchemy.Column('preshared_key', sqlalchemy.String(255)),
             sqlalchemy.Column('is_gateway', sqlalchemy.Integer, server_default='0'),
+            sqlalchemy.Column('opnsense_listen_port', sqlalchemy.Integer, server_default='0'),
             extend_existing=True
         )
         self.peersRestrictedTable = sqlalchemy.Table(
@@ -280,6 +281,7 @@ class WireguardConfiguration:
             sqlalchemy.Column('remote_endpoint', sqlalchemy.String(255)),
             sqlalchemy.Column('preshared_key', sqlalchemy.String(255)),
             sqlalchemy.Column('is_gateway', sqlalchemy.Integer, server_default='0'),
+            sqlalchemy.Column('opnsense_listen_port', sqlalchemy.Integer, server_default='0'),
             extend_existing=True
         )
         self.peersTransferTable = sqlalchemy.Table(
@@ -327,6 +329,7 @@ class WireguardConfiguration:
             sqlalchemy.Column('remote_endpoint', sqlalchemy.String(255)),
             sqlalchemy.Column('preshared_key', sqlalchemy.String(255)),
             sqlalchemy.Column('is_gateway', sqlalchemy.Integer, server_default='0'),
+            sqlalchemy.Column('opnsense_listen_port', sqlalchemy.Integer, server_default='0'),
             extend_existing=True
         )
         self.infoTable = sqlalchemy.Table(
@@ -340,19 +343,25 @@ class WireguardConfiguration:
         self.__migrateAddIsGatewayColumn(dbName)
 
     def __migrateAddIsGatewayColumn(self, dbName):
-        """Add is_gateway column to peer tables if missing (for DBs created
-        before v1.02). Uses dialect inspector to avoid blind ALTER errors."""
+        """Add gateway-related columns to peer tables if missing (for DBs
+        created before v1.02/v1.1). Uses dialect inspector to avoid blind
+        ALTER errors."""
         try:
             inspector = sqlalchemy.inspect(self.engine)
             targets = [dbName, f'{dbName}_restrict_access', f'{dbName}_deleted']
+            additions = [
+                ('is_gateway', 'INTEGER DEFAULT 0'),
+                ('opnsense_listen_port', 'INTEGER DEFAULT 0'),
+            ]
             with self.engine.begin() as conn:
                 for t in targets:
                     if not inspector.has_table(t):
                         continue
                     cols = {c['name'] for c in inspector.get_columns(t)}
-                    if 'is_gateway' not in cols:
-                        conn.execute(sqlalchemy.text(
-                            f'ALTER TABLE "{t}" ADD COLUMN is_gateway INTEGER DEFAULT 0'))
+                    for col, ddl in additions:
+                        if col not in cols:
+                            conn.execute(sqlalchemy.text(
+                                f'ALTER TABLE "{t}" ADD COLUMN {col} {ddl}'))
         except Exception:
             pass
 
@@ -569,7 +578,8 @@ class WireguardConfiguration:
                         "keepalive": i['keepalive'],
                         "remote_endpoint": self.DashboardConfig.GetConfig("Peers", "remote_endpoint")[1],
                         "preshared_key": i["preshared_key"],
-                        "is_gateway": 1 if i.get("is_gateway") else 0
+                        "is_gateway": 1 if i.get("is_gateway") else 0,
+                        "opnsense_listen_port": int(i.get("opnsense_listen_port") or 0)
                     }
                     conn.execute(
                         self.peersTable.insert().values(newPeer)
