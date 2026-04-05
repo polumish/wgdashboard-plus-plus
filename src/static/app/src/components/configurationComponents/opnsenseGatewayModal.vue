@@ -162,31 +162,38 @@ const close = () => {
 						</li>
 					</ul>
 
-					<!-- Manual Setup tab -->
+					<!-- Manual Setup tab (field names match OPNsense UI 1:1) -->
 					<div v-if="activeTab === 'manual'">
-						<p class="text-muted mb-2">
-							<small>
-								<LocaleText t="Enter these values in OPNsense: VPN → WireGuard → Instances (local) and Peers (remote)"></LocaleText>
-							</small>
-						</p>
 						<div class="alert alert-warning rounded-3 py-2 px-3 mb-3">
 							<small>
 								<i class="bi bi-exclamation-triangle-fill me-1"></i>
-								<LocaleText t="Do NOT import an XML backup — it will overwrite your entire OPNsense configuration."></LocaleText>
+								<LocaleText t="Do NOT import an XML backup — it would overwrite your entire OPNsense configuration. Enter these values manually."></LocaleText>
 							</small>
 						</div>
 
-						<h6 class="mb-2"><LocaleText t="Peer (remote WGDashboard server)"></LocaleText></h6>
-						<div class="bg-body-tertiary p-3 rounded-3 border mb-3" style="font-size: 0.85rem;">
+						<!-- Step 1: Peer -->
+						<div class="d-flex align-items-center mb-2 gap-2">
+							<span class="badge bg-primary rounded-circle">1</span>
+							<h6 class="mb-0">VPN → WireGuard → Peers → <strong>Add peer</strong></h6>
+						</div>
+						<div class="bg-body-tertiary p-3 rounded-3 border mb-4" style="font-size: 0.85rem;">
+							<div class="row g-2 mb-2">
+								<div class="col-4 text-muted">Enabled</div>
+								<div class="col-8"><i class="bi bi-check-square"></i> <small class="text-muted">(check)</small></div>
+							</div>
 							<div class="row g-2 mb-2">
 								<div class="col-4 text-muted">Name</div>
 								<div class="col-8"><code>{{ form.name }}-server</code>
 									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(form.name + '-server')"></i></div>
 							</div>
 							<div class="row g-2 mb-2">
-								<div class="col-4 text-muted">Public Key</div>
+								<div class="col-4 text-muted">Public key</div>
 								<div class="col-8"><code class="text-break">{{ activeResult.serverPublicKey }}</code>
 									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(activeResult.serverPublicKey)"></i></div>
+							</div>
+							<div class="row g-2 mb-2">
+								<div class="col-4 text-muted">Pre-shared key</div>
+								<div class="col-8"><small class="text-muted">(leave empty)</small></div>
 							</div>
 							<div class="row g-2 mb-2">
 								<div class="col-4 text-muted">Allowed IPs</div>
@@ -194,45 +201,70 @@ const close = () => {
 									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(activeResult.tunnelNetwork)"></i></div>
 							</div>
 							<div class="row g-2 mb-2">
-								<div class="col-4 text-muted">Endpoint</div>
-								<div class="col-8"><code>{{ activeResult.serverEndpoint }}:{{ activeResult.serverPort }}</code>
-									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(activeResult.serverEndpoint + ':' + activeResult.serverPort)"></i></div>
+								<div class="col-4 text-muted">Endpoint address</div>
+								<div class="col-8"><code>{{ activeResult.serverEndpoint }}</code>
+									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(activeResult.serverEndpoint)"></i></div>
+							</div>
+							<div class="row g-2 mb-2">
+								<div class="col-4 text-muted">Endpoint port</div>
+								<div class="col-8"><code>{{ activeResult.serverPort }}</code>
+									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(String(activeResult.serverPort))"></i></div>
+							</div>
+							<div class="row g-2 mb-2">
+								<div class="col-4 text-muted">Instances</div>
+								<div class="col-8"><small class="text-muted">(leave empty — assigned automatically from the Instance in step 2)</small></div>
 							</div>
 							<div class="row g-2">
-								<div class="col-4 text-muted">Keepalive</div>
-								<div class="col-8"><code>{{ activeResult.keepalive }}</code></div>
+								<div class="col-4 text-muted">Keepalive interval</div>
+								<div class="col-8"><code>{{ activeResult.keepalive }}</code>
+									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(String(activeResult.keepalive))"></i></div>
 							</div>
 						</div>
 
-						<h6 class="mb-2"><LocaleText t="Instance (local OPNsense)"></LocaleText></h6>
+						<!-- Step 2: Instance -->
+						<div class="d-flex align-items-center mb-2 gap-2">
+							<span class="badge bg-primary rounded-circle">2</span>
+							<h6 class="mb-0">VPN → WireGuard → Instances → <strong>Add instance</strong></h6>
+						</div>
 						<div class="bg-body-tertiary p-3 rounded-3 border" style="font-size: 0.85rem;">
+							<div class="row g-2 mb-2">
+								<div class="col-4 text-muted">Enabled</div>
+								<div class="col-8"><i class="bi bi-check-square"></i> <small class="text-muted">(check)</small></div>
+							</div>
 							<div class="row g-2 mb-2">
 								<div class="col-4 text-muted">Name</div>
 								<div class="col-8"><code>{{ form.name }}</code>
 									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(form.name)"></i></div>
 							</div>
 							<div class="row g-2 mb-2">
-								<div class="col-4 text-muted">Public Key</div>
+								<div class="col-4 text-muted">Public key</div>
 								<div class="col-8"><code class="text-break">{{ activeResult.publicKey }}</code>
 									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(activeResult.publicKey)"></i></div>
 							</div>
 							<div class="row g-2 mb-2">
-								<div class="col-4 text-muted">Private Key</div>
+								<div class="col-4 text-muted">Private key</div>
 								<div class="col-8"><code class="text-break">{{ activeResult.privateKey }}</code>
 									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(activeResult.privateKey)"></i></div>
 							</div>
 							<div class="row g-2 mb-2">
-								<div class="col-4 text-muted">Tunnel Address</div>
+								<div class="col-4 text-muted">Listen port</div>
+								<div class="col-8"><code>51820</code>
+									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard('51820')"></i></div>
+							</div>
+							<div class="row g-2 mb-2">
+								<div class="col-4 text-muted">Tunnel address</div>
 								<div class="col-8"><code>{{ activeResult.clientTunnelAddress }}</code>
 									<i class="bi bi-clipboard ms-2" role="button" @click="copyToClipboard(activeResult.clientTunnelAddress)"></i></div>
 							</div>
 							<div class="row g-2 mb-2">
-								<div class="col-4 text-muted">Listen Port</div>
-								<div class="col-8"><code>51820</code></div>
+								<div class="col-4 text-muted">Peers</div>
+								<div class="col-8"><code>{{ form.name }}-server</code>
+									<small class="text-muted ms-2">(select from dropdown)</small></div>
 							</div>
 							<div class="row g-2">
-								<div class="col-4 text-muted">Peers</div>
-								<div class="col-8"><code>{{ form.name }}-server</code></div>
+								<div class="col-4 text-muted">Disable routes</div>
+								<div class="col-8"><i class="bi bi-check-square"></i>
+									<small class="text-muted ms-2">(check — routing handled by OPNsense firewall/gateway rules)</small></div>
 							</div>
 						</div>
 					</div>
