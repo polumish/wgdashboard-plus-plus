@@ -217,18 +217,28 @@ class WireguardConfiguration:
             self.Status = self.getStatus()
 
     def __dropDatabase(self):
-        existingTables = [self.Name, f'{self.Name}_restrict_access', f'{self.Name}_transfer', f'{self.Name}_deleted']
+        existingTables = [
+            self.Name,
+            f'{self.Name}_restrict_access',
+            f'{self.Name}_transfer',
+            f'{self.Name}_deleted',
+            f'{self.Name}_history_endpoint',
+        ]
+        # Drop each independently so one missing table doesn't abort cleanup
+        for t in existingTables:
+            try:
+                with self.engine.begin() as conn:
+                    conn.execute(sqlalchemy.text(f'DROP TABLE IF EXISTS "{t}"'))
+            except Exception:
+                pass
+        # Also remove the ConfigurationsInfo row so the config is fully forgotten
         try:
             with self.engine.begin() as conn:
-                for t in existingTables:
-                    conn.execute(
-                        sqlalchemy.text(
-                            f'DROP TABLE "{t}"'
-                        )
-                    )
-        except Exception as e:
-            current_app.logger.error("Dropping table failed")
-            return False
+                conn.execute(
+                    self.infoTable.delete().where(self.infoTable.c.ID == self.Name)
+                )
+        except Exception:
+            pass
         return True
 
     def createDatabase(self, dbName = None):
@@ -413,10 +423,14 @@ class WireguardConfiguration:
 
     def getRestrictedPeers(self):
         self.RestrictedPeers = []
-        with self.engine.connect() as conn:
-            restricted = conn.execute(self.peersRestrictedTable.select()).mappings().fetchall()
-            for i in restricted:
-                self.RestrictedPeers.append(Peer(i, self))
+        try:
+            with self.engine.connect() as conn:
+                restricted = conn.execute(self.peersRestrictedTable.select()).mappings().fetchall()
+                for i in restricted:
+                    self.RestrictedPeers.append(Peer(i, self))
+        except sqlalchemy.exc.OperationalError:
+            # Table missing for orphaned/partially-initialised config — return empty
+            pass
 
     def configurationFileChanged(self) :
         mt = os.path.getmtime(self.configPath)
@@ -504,10 +518,14 @@ class WireguardConfiguration:
                 except Exception as e:
                     current_app.logger.error(f"{self.Name} getPeers() Error", e)
         else:
-            with self.engine.connect() as conn:
-                existingPeers = conn.execute(self.peersTable.select()).mappings().fetchall()
-                for i in existingPeers:
-                    tmpList.append(Peer(i, self))
+            try:
+                with self.engine.connect() as conn:
+                    existingPeers = conn.execute(self.peersTable.select()).mappings().fetchall()
+                    for i in existingPeers:
+                        tmpList.append(Peer(i, self))
+            except sqlalchemy.exc.OperationalError:
+                # Table missing for orphaned/partially-initialised config
+                pass
         self.Peers = tmpList
     
     def logPeersTraffic(self):
