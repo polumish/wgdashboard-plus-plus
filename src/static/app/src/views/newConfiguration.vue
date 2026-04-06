@@ -59,6 +59,7 @@ export default {
 	},
 	created() {
 		this.wireguardGenerateKeypair();
+		this.fetchSuggestion();
 		let hValue = []
 		while ([...new Set(hValue)].length !== 4){
 			hValue = [this.rand(1, (2**31) - 1), this.rand(1, (2**31) - 1), this.rand(1, (2**31) - 1), this.rand(1, (2**31) - 1)]
@@ -77,6 +78,16 @@ export default {
 			this.newConfiguration.PrivateKey = wg.privateKey;
 			this.newConfiguration.PublicKey = wg.publicKey;
 			this.newConfiguration.PresharedKey = wg.presharedKey;
+		},
+		fetchSuggestion(){
+			fetchGet("/api/suggestNewConfiguration", {}, (res) => {
+				if (res.status && res.data) {
+					if (!this.newConfiguration.Address && res.data.address)
+						this.newConfiguration.Address = res.data.address
+					if (!this.newConfiguration.ListenPort && res.data.listenPort)
+						this.newConfiguration.ListenPort = res.data.listenPort
+				}
+			})
 		},
 		async saveNewConfiguration(){
 			if (this.goodToSubmit){

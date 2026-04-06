@@ -400,6 +400,48 @@ def API_NewConfigurationTemplates_DeleteTemplate():
     status, msg = NewConfigurationTemplates.DeleteTemplate(template)
     return ResponseObject(status, msg)
 
+@app.get(f'{APP_PREFIX}/api/suggestNewConfiguration')
+def API_suggestNewConfiguration():
+    """Suggest next free Address (CIDR) and ListenPort for a new WG configuration."""
+    import ipaddress as _ipaddress
+    # Collect used addresses and ports
+    usedSubnets = set()
+    usedPorts = set()
+    for _cfgName, wc in WireguardConfigurations.items():
+        for addr in (a.strip() for a in (wc.Address or '').split(',')):
+            if not addr:
+                continue
+            try:
+                iface = _ipaddress.ip_interface(addr)
+                if iface.version == 4:
+                    usedSubnets.add(str(iface.network))
+            except ValueError:
+                pass
+        try:
+            usedPorts.add(int(wc.ListenPort))
+        except (ValueError, TypeError):
+            pass
+    # Suggest next /24 in 10.200.0.0/16
+    suggestedAddress = ''
+    baseNetwork = _ipaddress.ip_network('10.200.0.0/16')
+    for subnet in baseNetwork.subnets(new_prefix=24):
+        if str(subnet) not in usedSubnets:
+            # Use first host-like address: x.x.x.0/24 as WG interface address
+            suggestedAddress = f"{subnet.network_address}/{subnet.prefixlen}"
+            break
+    # Suggest next free port
+    if usedPorts:
+        suggestedPort = max(usedPorts) + 1
+    else:
+        suggestedPort = 51820
+    return ResponseObject(True, data={
+        "address": suggestedAddress,
+        "listenPort": suggestedPort,
+        "usedAddresses": sorted(list(usedSubnets)),
+        "usedPorts": sorted(list(usedPorts)),
+    })
+
+
 @app.post(f'{APP_PREFIX}/api/addWireguardConfiguration')
 def API_addWireguardConfiguration():
     data = request.get_json()
