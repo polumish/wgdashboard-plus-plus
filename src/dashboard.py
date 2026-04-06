@@ -1522,6 +1522,9 @@ def API_addPeers(configName):
                         if not found:
                             return ResponseObject(False, f"This IP is not available: {i}")
 
+                peerType = int(data.get('is_gateway', 0) or 0)
+                if peerType not in (0, 1, 2):
+                    peerType = 0
                 status, addedPeers, message = config.addPeers([
                     {
                         "name": name,
@@ -1533,9 +1536,18 @@ def API_addPeers(configName):
                         "DNS": dns_addresses,
                         "mtu": mtu,
                         "keepalive": keep_alive,
-                        "advanced_security": "off"
+                        "advanced_security": "off",
+                        "is_gateway": peerType,
                     }]
                 )
+                # If server peer added to point-to-site config → set override to server's IP
+                if status and peerType == 2 and _mode == 'point-to-site' and allowed_ips:
+                    serverIp = allowed_ips[0].split('/')[0]
+                    _wc.configurationInfo.OverridePeerSettings.EndpointAllowedIPs = f'{serverIp}/32'
+                    _wc.storeConfigurationInfo()
+                # Sync gateway subnets if gateway/server
+                if status and peerType in (1, 2):
+                    _syncGatewaySubnetsToConfig(config)
                 return ResponseObject(status=status, message=message, data=addedPeers)
         except Exception as e:
             app.logger.error("Add peers failed", e)

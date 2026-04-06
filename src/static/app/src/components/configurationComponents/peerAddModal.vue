@@ -36,6 +36,7 @@ const peerData = ref({
 	preshared_key_bulkAdd: false,
 	advanced_security: "off",
 	allowed_ips_validation: true,
+	is_gateway: 0,
 })
 const availableIp = ref([])
 const saving = ref(false)
@@ -107,6 +108,34 @@ watch(() => {
 							<BulkAdd :saving="saving" :data="peerData" :availableIp="availableIp"></BulkAdd>
 							<template v-if="!peerData.bulkAdd">
 								<hr class="mb-0 mt-2">
+								<div>
+									<label class="form-label">
+										<small class="text-muted"><LocaleText t="Device Type"></LocaleText></small>
+									</label>
+									<div class="d-flex gap-3">
+										<div class="form-check">
+											<input class="form-check-input" type="radio" id="peerTypeClient"
+												:value="0" v-model="peerData.is_gateway" :disabled="saving">
+											<label class="form-check-label" for="peerTypeClient">
+												<small>Client</small>
+											</label>
+										</div>
+										<div class="form-check">
+											<input class="form-check-input" type="radio" id="peerTypeServer"
+												:value="2" v-model="peerData.is_gateway" :disabled="saving">
+											<label class="form-check-label" for="peerTypeServer">
+												<i class="bi bi-hdd-rack me-1"></i><small>Server</small>
+											</label>
+										</div>
+										<div class="form-check">
+											<input class="form-check-input" type="radio" id="peerTypeGateway"
+												:value="1" v-model="peerData.is_gateway" :disabled="saving">
+											<label class="form-check-label" for="peerTypeGateway">
+												<i class="bi bi-router me-1"></i><small>Gateway</small>
+											</label>
+										</div>
+									</div>
+								</div>
 								<NameInput :saving="saving" :data="peerData"></NameInput>
 								<PrivatePublicKeyInput :saving="saving" :data="peerData"></PrivatePublicKeyInput>
 								<AllowedIPsInput :availableIp="availableIp" :saving="saving" :data="peerData"></AllowedIPsInput>
