@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-    <a href="https://github.com/polumish/wgdashboard-plus-plus/releases"><img src="https://img.shields.io/badge/Release_Notes-v1.3-brightgreen?style=for-the-badge"></a>
+    <a href="https://github.com/polumish/wgdashboard-plus-plus/releases"><img src="https://img.shields.io/badge/Release_Notes-v1.4-brightgreen?style=for-the-badge"></a>
     <a href="https://github.com/polumish/wgdashboard-plus-plus/discussions"><img src="https://img.shields.io/badge/Discussions-welcome-purple?style=for-the-badge&logo=github"></a>
     <a href="https://git.half.net.ua/polumish/wgdashboard-plus-plus/-/issues"><img src="https://img.shields.io/badge/Bug_Reports-welcome-orange?style=for-the-badge&logo=gitlab"></a>
 </p>
@@ -60,6 +60,7 @@ Fit more peers on screen with tight spacing.
 - **Trusted IPs** — skip TOTP for admin and client from allowed networks
 
 ### Admin Features
+- **Backup & Restore** — two-level backup system with global scheduled snapshots (daily/weekly/monthly) and automatic per-config backups before any change. Granular restore with component-level selection. Calendar and table views. Restore points for undo safety. SHA-256 integrity verification. JSON format (cross-database compatible).
 - **OPNsense Gateway generator** ⚠️ **Alpha** — export WireGuard peer config as OPNsense XML. **Not recommended for production use.** Please report any issues you encounter while testing.
 - **Broadcast AllowedIPs** — propagate a peer's allowed IPs to all other peers in one click
 - **Peer counts in sidebar** — connected/total counts next to each configuration
