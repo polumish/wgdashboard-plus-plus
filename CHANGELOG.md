@@ -5,6 +5,15 @@ All notable changes to WgDashboard++ will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to a custom versioning scheme: **X.YZ** where X=major, Y=feature (+0.1), Z=bugfix (+0.01).
 
+## [v1.3] - 2026-04-06
+
+### Added
+- **Auto-suggest Address and ListenPort** when creating a new WG configuration — scans existing configs, proposes next free /24 in 10.200.0.0/16 and next free port. Fields remain editable.
+- **Auto-sync gateway subnets** — when an OPNsense Gateway is added, its LAN subnets are automatically propagated to Override EndpointAllowedIPs (client-side routing) and Routed LAN Subnets (server-side policy routing), then policy routing is applied immediately. Works with multiple gateways per config (union of all gateway LANs). Also triggers on: gateway flag toggle, peer settings update, peer deletion.
+
+### Fixed
+- **Adding peers to stopped configurations** — previously failed with shell error "No such device". Now peers are saved to DB and appended to .conf file; `wg-quick up` picks them up automatically when the configuration is started.
+
 ## [v1.2] - 2026-04-05
 
 ### Added
@@ -73,6 +82,7 @@ Initial release of WgDashboard++, forked from [WGDashboard v4.3.2](https://githu
 - Upstream watch — daily GitLab issues for upstream releases/commits
 - Cache-Control headers on HTML responses
 
+[v1.3]: https://github.com/polumish/wgdashboard-plus-plus/releases/tag/v1.3
 [v1.2]: https://github.com/polumish/wgdashboard-plus-plus/releases/tag/v1.2
 [v1.1]: https://github.com/polumish/wgdashboard-plus-plus/releases/tag/v1.1
 [v1.02]: https://github.com/polumish/wgdashboard-plus-plus/releases/tag/v1.02

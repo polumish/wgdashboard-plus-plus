@@ -789,12 +789,16 @@ def API_updatePeerSettings(configName):
                 status, msg = peer.updatePeer(name, private_key, preshared_key, dns_addresses,
                     allowed_ip, endpoint_allowed_ip, mtu, keepalive, "off")
             wireguardConfig.getPeers()
+            # Re-sync gateway subnets if this peer is a gateway
+            updatedPeer = wireguardConfig.searchPeer(id)
+            if updatedPeer[0] and getattr(updatedPeer[1], 'is_gateway', False):
+                _syncGatewaySubnetsToConfig(wireguardConfig)
             DashboardWebHooks.RunWebHook('peer_updated', {
                 "configuration": wireguardConfig.Name,
                 "peers": [id]
             })
             return ResponseObject(status, msg)
-            
+
     return ResponseObject(False, "Peer does not exist")
 
 @app.post(f'{APP_PREFIX}/api/resetPeerData/<configName>')
@@ -833,6 +837,8 @@ def API_deletePeers(configName: str) -> ResponseObject:
             for c in assignments:
                 DashboardClients.DashboardClientsPeerAssignment.UnassignClients(c.AssignmentID)
         
+        # Re-sync gateway subnets (in case deleted peer was a gateway)
+        _syncGatewaySubnetsToConfig(configuration)
         return ResponseObject(status, msg)
 
     return ResponseObject(False, "Configuration does not exist", status_code=404)
@@ -1062,6 +1068,48 @@ PersistentKeepalive = {keepalive}
     }
 
 
+def _syncGatewaySubnetsToConfig(wc):
+    """After gateway peer changes, recalculate EndpointAllowedIPs and
+    RoutedLANSubnets from all gateway peers in this config, then apply
+    policy routing live."""
+    import ipaddress as _ipaddress
+    lanSubnets = set()
+    for p in wc.Peers:
+        if not getattr(p, 'is_gateway', False):
+            continue
+        for part in (p.allowed_ip or '').split(','):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                net = _ipaddress.ip_network(part, strict=False)
+                # Skip the peer's own WG /32 address (it's in the config's tunnel subnet)
+                configNet = None
+                for addr in (a.strip() for a in (wc.Address or '').split(',')):
+                    try:
+                        configNet = _ipaddress.ip_interface(addr).network
+                        break
+                    except ValueError:
+                        pass
+                if configNet and net.subnet_of(configNet):
+                    continue  # This is the peer's WG IP, not a LAN
+                lanSubnets.add(part)
+            except (ValueError, TypeError):
+                lanSubnets.add(part)
+    lanStr = ', '.join(sorted(lanSubnets)) if lanSubnets else ''
+    # Update EndpointAllowedIPs
+    wc.configurationInfo.OverridePeerSettings.EndpointAllowedIPs = lanStr
+    # Update RoutedLANSubnets
+    wc.configurationInfo.RoutedLANSubnets = lanStr
+    wc.storeConfigurationInfo()
+    # Apply policy routing live
+    subnet = _configSubnetForPolicy(wc)
+    if subnet and lanSubnets:
+        tableId = _policyRoutingTableId(wc.Name)
+        _applyPolicyRoutesLive(wc.Name, subnet, list(lanSubnets), tableId)
+    return lanStr
+
+
 @app.post(f'{APP_PREFIX}/api/addOPNsenseGateway/<configName>')
 def API_addOPNsenseGateway(configName: str):
     data = request.get_json() or {}
@@ -1075,10 +1123,10 @@ def API_addOPNsenseGateway(configName: str):
         results = []
         errors = []
         for cfgName, wc in WireguardConfigurations.items():
-            # For all-configs mode, always auto-increment (ignore override to avoid collisions)
             ok, res = _createGatewayPeerInConfig(wc, name, lanSubnets, keepalive)
             if ok:
                 results.append(res)
+                _syncGatewaySubnetsToConfig(wc)
             else:
                 errors.append({"configName": cfgName, "error": res})
         if not results:
@@ -1092,7 +1140,9 @@ def API_addOPNsenseGateway(configName: str):
     ok, res = _createGatewayPeerInConfig(wc, name, lanSubnets, keepalive, listenPortOverride)
     if not ok:
         return ResponseObject(False, res)
-    # Back-compat: keep flat shape for single-config response
+    # Auto-sync: update EndpointAllowedIPs + RoutedLANSubnets + apply policy routing
+    syncedLans = _syncGatewaySubnetsToConfig(wc)
+    res["syncedLANSubnets"] = syncedLans
     return ResponseObject(True, data=res)
 
 
@@ -1297,6 +1347,7 @@ def API_setPeerGatewayFlag(configName: str):
                 .where(wc.peersTable.c.id == peerId)
             )
         wc.getPeers()
+        _syncGatewaySubnetsToConfig(wc)
         return ResponseObject(True, f"Updated is_gateway={flag}")
     except Exception as e:
         return ResponseObject(False, f"Failed: {e}")
