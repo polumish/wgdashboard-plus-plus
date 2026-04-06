@@ -586,9 +586,13 @@ def API_updateWireguardConfigurationInfo():
         return ResponseObject(status=False, message="Please provide configuration name, key and value")
     if name not in WireguardConfigurations.keys():
         return ResponseObject(False, "Configuration does not exist", status_code=404)
-    
+
+    try:
+        AllBackupScheduler.onConfigChange(name, f"info_updated: {key}")
+    except Exception:
+        pass
     status, msg, key = WireguardConfigurations[name].updateConfigurationInfo(key, value)
-    
+
     return ResponseObject(status=status, message=msg, data=key)
 
 @app.get(f'{APP_PREFIX}/api/getWireguardConfigurationRawFile')
@@ -613,7 +617,11 @@ def API_UpdateWireguardConfigurationRawFile():
         return ResponseObject(False, "Please provide a valid configuration name")
     if rawConfiguration is None or len(rawConfiguration) == 0:
         return ResponseObject(False, "Please provide content")
-    
+
+    try:
+        AllBackupScheduler.onConfigChange(configurationName, "raw_config_updated")
+    except Exception:
+        pass
     status, err = WireguardConfigurations[configurationName].updateRawConfigurationFile(rawConfiguration)
 
     return ResponseObject(status=status, message=err)
