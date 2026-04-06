@@ -123,7 +123,10 @@ export default {
 						            >
 							<span class="dot" :class="{active: c.Status}" style="flex-shrink: 0;"></span>
 							<span style="text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{c.Name}}</span>
-							<small style="font-size: 0.7rem; white-space: nowrap; text-align: right;">
+							<small style="font-size: 0.6rem; white-space: nowrap; text-align: right; display: flex; align-items: center; gap: 3px;">
+								<span v-if="c.Info && c.Info.NetworkMode === 'gateway'" class="badge bg-info-subtle text-info-emphasis rounded-3" style="font-size: 0.55rem; padding: 1px 4px;" title="Gateway mode"><i class="bi bi-router"></i></span>
+								<span v-else-if="c.Info && c.Info.NetworkMode === 'point-to-site'" class="badge bg-warning-subtle text-warning-emphasis rounded-3" style="font-size: 0.55rem; padding: 1px 4px;" title="Point-to-Site"><i class="bi bi-broadcast"></i></span>
+								<span v-else class="badge bg-success-subtle text-success-emphasis rounded-3" style="font-size: 0.55rem; padding: 1px 4px;" title="Mesh"><i class="bi bi-diagram-3"></i></span>
 								<span class="text-success">{{c.ConnectedPeers}}</span><span class="text-muted">/{{c.TotalPeers}}</span>
 							</small>
 						</RouterLink>

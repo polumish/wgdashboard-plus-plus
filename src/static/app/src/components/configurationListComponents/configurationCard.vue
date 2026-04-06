@@ -58,6 +58,17 @@ export default {
 					<small>
 						<ProtocolBadge :protocol="c.Protocol" :mini="true"></ProtocolBadge>
 					</small>
+					<small v-if="c.Info && c.Info.NetworkMode">
+						<span v-if="c.Info.NetworkMode === 'gateway'" class="badge bg-info-subtle text-info-emphasis rounded-3" style="font-size: 0.65rem;">
+							<i class="bi bi-router me-1"></i>Gateway
+						</span>
+						<span v-else-if="c.Info.NetworkMode === 'point-to-site'" class="badge bg-warning-subtle text-warning-emphasis rounded-3" style="font-size: 0.65rem;">
+							<i class="bi bi-broadcast me-1"></i>P2S
+						</span>
+						<span v-else class="badge bg-success-subtle text-success-emphasis rounded-3" style="font-size: 0.65rem;">
+							<i class="bi bi-diagram-3 me-1"></i>Mesh
+						</span>
+					</small>
 					<small v-if="c.Info.Description">
 						<span class="badge text-bg-info rounded-3 shadow">
 							<i class="bi bi-pencil-fill me-2"></i>
