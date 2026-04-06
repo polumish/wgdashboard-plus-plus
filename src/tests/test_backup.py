@@ -1,11 +1,12 @@
 """
 Tests for BackupManager — global snapshots, per-config backups,
-delete/download, and integrity verification.
+delete/download, integrity verification, restore, and rotation.
 """
 import json
 import os
 import shutil
 import tarfile
+import time
 from unittest.mock import MagicMock, patch
 import pytest
 
@@ -314,3 +315,186 @@ class TestBackupManagerPerConfig:
             result = mgr.createConfigBackup("nonexistent_config", trigger="manual")
 
         assert result["status"] is False
+
+
+# ---------------------------------------------------------------------------
+# TestBackupManagerRestore
+# ---------------------------------------------------------------------------
+
+class TestBackupManagerRestore:
+
+    def test_restore_snapshot_settings_only(self, backup_env, tmp_path):
+        mgr = _make_manager(backup_env)
+        with patch("modules.BackupManager.inspect", return_value=backup_env["inspector"]):
+            result = mgr.createGlobalSnapshot(trigger="manual")
+
+        assert result["status"] is True
+        name = result["name"]
+
+        # Overwrite the ini so we can confirm restore brings it back
+        ini_path = backup_env["ini_path"]
+        with open(ini_path, "w") as f:
+            f.write("[Server]\napp_port = 9999\n")
+
+        restore_result = mgr.restoreFromSnapshot(name, components=["dashboard_settings"])
+        assert restore_result["status"] is True
+        assert "dashboard_settings" in restore_result["restored"]
+
+        # ini should be restored to original content
+        content = open(ini_path).read()
+        assert "10086" in content
+
+    def test_restore_snapshot_configs(self, backup_env):
+        mgr = _make_manager(backup_env)
+        with patch("modules.BackupManager.inspect", return_value=backup_env["inspector"]):
+            result = mgr.createGlobalSnapshot(trigger="manual")
+
+        assert result["status"] is True
+        name = result["name"]
+
+        # Remove a config file to simulate loss
+        wg0_path = os.path.join(backup_env["wg_path"], "wg0.conf")
+        os.remove(wg0_path)
+        assert not os.path.exists(wg0_path)
+
+        restore_result = mgr.restoreFromSnapshot(name, components=["configurations"])
+        assert restore_result["status"] is True
+        assert "configurations" in restore_result["restored"]
+
+        # File should be back
+        assert os.path.isfile(wg0_path)
+
+    def test_restore_nonexistent_snapshot(self, backup_env):
+        mgr = _make_manager(backup_env)
+        result = mgr.restoreFromSnapshot("snapshot_does_not_exist", components=["dashboard_settings"])
+        assert result["status"] is False
+        assert "not found" in result["message"].lower()
+
+    def test_restore_verifies_integrity_first(self, backup_env):
+        mgr = _make_manager(backup_env)
+        with patch("modules.BackupManager.inspect", return_value=backup_env["inspector"]):
+            result = mgr.createGlobalSnapshot(trigger="manual")
+
+        name = result["name"]
+        snap_dir = os.path.join(backup_env["backup_path"], "global", name)
+
+        # Corrupt a file inside the snapshot
+        conf_files = os.listdir(os.path.join(snap_dir, "configs"))
+        corrupt_path = os.path.join(snap_dir, "configs", conf_files[0])
+        with open(corrupt_path, "a") as f:
+            f.write("\nCORRUPTED\n")
+
+        restore_result = mgr.restoreFromSnapshot(name, components=["configurations"])
+        assert restore_result["status"] is False
+        assert "integrity" in restore_result["message"].lower()
+
+    def test_restore_config_backup(self, backup_env):
+        mgr = _make_manager(backup_env)
+        with patch("modules.BackupManager.inspect", return_value=backup_env["inspector"]):
+            result = mgr.createConfigBackup("wg0", trigger="manual")
+
+        assert result["status"] is True
+        name = result["name"]
+
+        # Overwrite the conf file
+        wg0_path = os.path.join(backup_env["wg_path"], "wg0.conf")
+        original_content = open(wg0_path).read()
+        with open(wg0_path, "w") as f:
+            f.write("[Interface]\nAddress = 1.2.3.4/32\n")
+
+        restore_result = mgr.restoreConfigBackup("wg0", name)
+        assert restore_result["status"] is True
+        assert restore_result["restored"] == "wg0"
+
+        # Content should be restored
+        assert open(wg0_path).read() == original_content
+
+    def test_restore_config_backup_nonexistent(self, backup_env):
+        mgr = _make_manager(backup_env)
+        result = mgr.restoreConfigBackup("wg0", "nonexistent_backup")
+        assert result["status"] is False
+        assert "not found" in result["message"].lower()
+
+
+# ---------------------------------------------------------------------------
+# TestBackupManagerRotation
+# ---------------------------------------------------------------------------
+
+class TestBackupManagerRotation:
+
+    def test_enforce_rotation_keeps_limit(self, backup_env):
+        mgr = _make_manager(backup_env)
+        with patch("modules.BackupManager.inspect", return_value=backup_env["inspector"]):
+            for _ in range(5):
+                mgr.createGlobalSnapshot(trigger="scheduled_daily")
+                time.sleep(0.01)
+
+        assert len(mgr.getGlobalSnapshots(filter_type="scheduled_daily")) == 5
+
+        mgr.enforceRotation(
+            daily_keep=3,
+            weekly_keep=10,
+            monthly_keep=10,
+            max_storage_mb=10000,
+        )
+
+        remaining = mgr.getGlobalSnapshots(filter_type="scheduled_daily")
+        assert len(remaining) == 3
+
+    def test_enforce_rotation_by_size(self, backup_env):
+        mgr = _make_manager(backup_env)
+        with patch("modules.BackupManager.inspect", return_value=backup_env["inspector"]):
+            for _ in range(4):
+                mgr.createGlobalSnapshot(trigger="scheduled_daily")
+                time.sleep(0.01)
+
+        assert len(mgr.getGlobalSnapshots()) == 4
+
+        # Enforce a very small storage limit (0 MB) — all scheduled snapshots should go
+        mgr.enforceRotation(
+            daily_keep=1000,
+            weekly_keep=1000,
+            monthly_keep=1000,
+            max_storage_mb=0,
+        )
+
+        # All non-manual snapshots should be deleted
+        remaining = mgr.getGlobalSnapshots()
+        assert all(s["trigger"] == "manual" for s in remaining)
+
+    def test_enforce_rotation_preserves_manual(self, backup_env):
+        mgr = _make_manager(backup_env)
+        with patch("modules.BackupManager.inspect", return_value=backup_env["inspector"]):
+            for _ in range(3):
+                mgr.createGlobalSnapshot(trigger="manual")
+                time.sleep(0.01)
+            for _ in range(3):
+                mgr.createGlobalSnapshot(trigger="scheduled_daily")
+                time.sleep(0.01)
+
+        # Enforce tight limits
+        mgr.enforceRotation(
+            daily_keep=0,
+            weekly_keep=0,
+            monthly_keep=0,
+            max_storage_mb=0,
+        )
+
+        # Manual snapshots must survive
+        remaining = mgr.getGlobalSnapshots()
+        manual_remaining = [s for s in remaining if s["trigger"] == "manual"]
+        assert len(manual_remaining) == 3
+
+    def test_enforce_per_config_rotation(self, backup_env):
+        mgr = _make_manager(backup_env)
+        with patch("modules.BackupManager.inspect", return_value=backup_env["inspector"]):
+            for _ in range(5):
+                mgr.createConfigBackup("wg0", trigger="manual")
+                time.sleep(0.01)
+
+        assert len(mgr.getConfigBackups("wg0")) == 5
+
+        mgr.enforcePerConfigRotation("wg0", keep=2)
+
+        remaining = mgr.getConfigBackups("wg0")
+        assert len(remaining) == 2
