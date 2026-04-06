@@ -1281,6 +1281,10 @@ class WireguardConfiguration:
             self.configurationInfo.PeerTrafficTracking = value
         elif key == "PeerHistoricalEndpointTracking":
             self.configurationInfo.PeerHistoricalEndpointTracking = value
+        elif key == "NetworkMode":
+            if value not in ('mesh', 'point-to-site', 'gateway'):
+                return False, f"Invalid NetworkMode: {value}", None
+            self.configurationInfo.NetworkMode = value
         elif key == "RoutedLANSubnets":
             # Validate comma-separated CIDR list
             raw = (value or '').strip()
