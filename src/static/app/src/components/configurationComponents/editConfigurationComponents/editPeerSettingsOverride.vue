@@ -94,39 +94,21 @@ const submitForm = async () => {
 
 <template>
 <div id="editPeerSettingsOverride">
-	<h5 class="mb-0">
-		<i class="bi bi-diagram-3 me-2"></i>
+	<h5 class="mb-0 d-flex align-items-center gap-2">
 		<LocaleText t="Network Mode"></LocaleText>
+		<span v-if="networkMode === 'mesh'" class="badge bg-body-tertiary text-body-emphasis rounded-3">
+			<i class="bi bi-diagram-3 me-1"></i> Mesh
+		</span>
+		<span v-else-if="networkMode === 'point-to-site'" class="badge bg-body-tertiary text-body-emphasis rounded-3">
+			<i class="bi bi-broadcast me-1"></i> Point-to-Site
+		</span>
+		<span v-else-if="networkMode === 'gateway'" class="badge bg-body-tertiary text-body-emphasis rounded-3">
+			<i class="bi bi-router me-1"></i> Gateway
+		</span>
 	</h5>
 	<h6 class="mb-3 text-muted">
-		<small><LocaleText t="Controls default AllowedIPs for new peers in this configuration"></LocaleText></small>
+		<small><LocaleText t="Set at creation time. Determines default AllowedIPs for new peers."></LocaleText></small>
 	</h6>
-	<div class="d-flex gap-3 mb-2">
-		<div class="form-check">
-			<input class="form-check-input" type="radio" id="editModeMesh"
-				   value="mesh" v-model="networkMode" @change="saveNetworkMode()" :disabled="modeSaving">
-			<label class="form-check-label" for="editModeMesh">
-				<strong><i class="bi bi-diagram-3 me-1"></i> Mesh</strong>
-				<small class="text-muted d-block"><LocaleText t="Peers see each other"></LocaleText></small>
-			</label>
-		</div>
-		<div class="form-check">
-			<input class="form-check-input" type="radio" id="editModeP2S"
-				   value="point-to-site" v-model="networkMode" @change="saveNetworkMode()" :disabled="modeSaving">
-			<label class="form-check-label" for="editModeP2S">
-				<strong><i class="bi bi-broadcast me-1"></i> Point-to-Site</strong>
-				<small class="text-muted d-block"><LocaleText t="Peers see server only"></LocaleText></small>
-			</label>
-		</div>
-		<div class="form-check">
-			<input class="form-check-input" type="radio" id="editModeGW"
-				   value="gateway" v-model="networkMode" @change="saveNetworkMode()" :disabled="modeSaving">
-			<label class="form-check-label" for="editModeGW">
-				<strong><i class="bi bi-router me-1"></i> Gateway</strong>
-				<small class="text-muted d-block"><LocaleText t="Full tunnel (0.0.0.0/0)"></LocaleText></small>
-			</label>
-		</div>
-	</div>
 	<hr class="my-4">
 
 	<h5 class="mb-0">
