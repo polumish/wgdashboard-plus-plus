@@ -9,21 +9,21 @@ import dayjs from "dayjs";
 const backups = ref([]);
 const settings = ref({
     backup_path: "",
-    backup_max_size: 1024,
-    backup_auto_on_config_change: true,
-    backup_auto_on_settings_change: true,
-    backup_auto_debounce: 30,
-    backup_daily_enabled: false,
-    backup_daily_time: "02:00",
-    backup_daily_keep: 7,
-    backup_weekly_enabled: false,
-    backup_weekly_day: "monday",
-    backup_weekly_time: "02:00",
-    backup_weekly_keep: 4,
-    backup_monthly_enabled: false,
-    backup_monthly_day: 1,
-    backup_monthly_time: "02:00",
-    backup_monthly_keep: 3,
+    max_storage_mb: 1024,
+    auto_backup_config_changes: true,
+    auto_backup_peer_changes: true,
+    auto_backup_debounce_seconds: 30,
+    auto_backup_max_wait_seconds: 300,
+    daily_enabled: false,
+    daily_time: "02:00",
+    daily_keep: 7,
+    weekly_enabled: false,
+    weekly_day: "monday",
+    weekly_keep: 4,
+    monthly_enabled: false,
+    monthly_day: 1,
+    monthly_keep: 3,
+    per_config_keep: 10,
 });
 
 const loading = ref(false);
@@ -51,7 +51,6 @@ const restoreComponents = ref({
 
 // Storage info (from settings if available)
 const storageUsed = ref(0);
-const storageMax = ref(1024);
 
 // Debounce timer for settings auto-save
 let saveTimer = null;
@@ -73,8 +72,8 @@ const backupCountByType = computed(() => {
 });
 
 const storagePercent = computed(() => {
-    if (!storageMax.value) return 0;
-    return Math.min(100, Math.round((storageUsed.value / storageMax.value) * 100));
+    if (!settings.value.max_storage_mb) return 0;
+    return Math.min(100, Math.round((storageUsed.value / settings.value.max_storage_mb) * 100));
 });
 
 const storageBarClass = computed(() => {
@@ -148,7 +147,7 @@ function loadSettings() {
     fetchGet("/api/backup/settings", {}, (res) => {
         if (res && res.status && res.data) {
             Object.assign(settings.value, res.data);
-            storageMax.value = settings.value.backup_max_size || 1024;
+
         }
     });
 }
@@ -158,7 +157,7 @@ function scheduleSave() {
     saveTimer = setTimeout(() => {
         fetchPost("/api/backup/settings/update", settings.value, (res) => {
             if (res && res.status) {
-                storageMax.value = settings.value.backup_max_size || 1024;
+    
             }
         });
     }, 500);
@@ -302,16 +301,16 @@ onMounted(() => {
                     <!-- Daily -->
                     <div class="d-flex align-items-center gap-2 ps-2 border-start border-3 border-success rounded-1 flex-wrap">
                         <div class="form-check form-switch mb-0 d-flex align-items-center gap-2" style="min-width:110px">
-                            <input class="form-check-input" type="checkbox" v-model="settings.backup_daily_enabled" role="switch" id="dailySwitch">
+                            <input class="form-check-input" type="checkbox" v-model="settings.daily_enabled" role="switch" id="dailySwitch">
                             <label class="form-check-label fw-semibold text-success-emphasis" for="dailySwitch">
                                 <LocaleText t="Daily"></LocaleText>
                             </label>
                         </div>
-                        <div class="d-flex align-items-center gap-1 flex-wrap" :class="{ 'opacity-50': !settings.backup_daily_enabled }">
+                        <div class="d-flex align-items-center gap-1 flex-wrap" :class="{ 'opacity-50': !settings.daily_enabled }">
                             <span class="text-body-secondary"><LocaleText t="At"></LocaleText></span>
-                            <input type="time" class="form-control form-control-sm rounded-2" style="width:110px" v-model="settings.backup_daily_time" :disabled="!settings.backup_daily_enabled">
+                            <input type="time" class="form-control form-control-sm rounded-2" style="width:110px" v-model="settings.daily_time" :disabled="!settings.daily_enabled">
                             <span class="text-body-secondary ms-2"><LocaleText t="Keep"></LocaleText></span>
-                            <select class="form-select form-select-sm rounded-2" style="width:80px" v-model.number="settings.backup_daily_keep" :disabled="!settings.backup_daily_enabled">
+                            <select class="form-select form-select-sm rounded-2" style="width:80px" v-model.number="settings.daily_keep" :disabled="!settings.daily_enabled">
                                 <option v-for="n in [1,3,5,7,10,14,30]" :key="n" :value="n">{{ n }}</option>
                             </select>
                         </div>
@@ -320,20 +319,18 @@ onMounted(() => {
                     <!-- Weekly -->
                     <div class="d-flex align-items-center gap-2 ps-2 border-start border-3 border-warning rounded-1 flex-wrap">
                         <div class="form-check form-switch mb-0 d-flex align-items-center gap-2" style="min-width:110px">
-                            <input class="form-check-input" type="checkbox" v-model="settings.backup_weekly_enabled" role="switch" id="weeklySwitch">
+                            <input class="form-check-input" type="checkbox" v-model="settings.weekly_enabled" role="switch" id="weeklySwitch">
                             <label class="form-check-label fw-semibold text-warning-emphasis" for="weeklySwitch">
                                 <LocaleText t="Weekly"></LocaleText>
                             </label>
                         </div>
-                        <div class="d-flex align-items-center gap-1 flex-wrap" :class="{ 'opacity-50': !settings.backup_weekly_enabled }">
+                        <div class="d-flex align-items-center gap-1 flex-wrap" :class="{ 'opacity-50': !settings.weekly_enabled }">
                             <span class="text-body-secondary"><LocaleText t="On"></LocaleText></span>
-                            <select class="form-select form-select-sm rounded-2" style="width:120px" v-model="settings.backup_weekly_day" :disabled="!settings.backup_weekly_enabled">
+                            <select class="form-select form-select-sm rounded-2" style="width:120px" v-model="settings.weekly_day" :disabled="!settings.weekly_enabled">
                                 <option v-for="d in ['monday','tuesday','wednesday','thursday','friday','saturday','sunday']" :key="d" :value="d">{{ d.charAt(0).toUpperCase() + d.slice(1) }}</option>
                             </select>
-                            <span class="text-body-secondary"><LocaleText t="at"></LocaleText></span>
-                            <input type="time" class="form-control form-control-sm rounded-2" style="width:110px" v-model="settings.backup_weekly_time" :disabled="!settings.backup_weekly_enabled">
                             <span class="text-body-secondary ms-2"><LocaleText t="Keep"></LocaleText></span>
-                            <select class="form-select form-select-sm rounded-2" style="width:80px" v-model.number="settings.backup_weekly_keep" :disabled="!settings.backup_weekly_enabled">
+                            <select class="form-select form-select-sm rounded-2" style="width:80px" v-model.number="settings.weekly_keep" :disabled="!settings.weekly_enabled">
                                 <option v-for="n in [1,2,4,8,12]" :key="n" :value="n">{{ n }}</option>
                             </select>
                         </div>
@@ -342,18 +339,16 @@ onMounted(() => {
                     <!-- Monthly -->
                     <div class="d-flex align-items-center gap-2 ps-2 border-start border-3 border-info rounded-1 flex-wrap">
                         <div class="form-check form-switch mb-0 d-flex align-items-center gap-2" style="min-width:110px">
-                            <input class="form-check-input" type="checkbox" v-model="settings.backup_monthly_enabled" role="switch" id="monthlySwitch">
+                            <input class="form-check-input" type="checkbox" v-model="settings.monthly_enabled" role="switch" id="monthlySwitch">
                             <label class="form-check-label fw-semibold text-info-emphasis" for="monthlySwitch">
                                 <LocaleText t="Monthly"></LocaleText>
                             </label>
                         </div>
-                        <div class="d-flex align-items-center gap-1 flex-wrap" :class="{ 'opacity-50': !settings.backup_monthly_enabled }">
+                        <div class="d-flex align-items-center gap-1 flex-wrap" :class="{ 'opacity-50': !settings.monthly_enabled }">
                             <span class="text-body-secondary"><LocaleText t="Day"></LocaleText></span>
-                            <input type="number" class="form-control form-control-sm rounded-2" style="width:70px" min="1" max="28" v-model.number="settings.backup_monthly_day" :disabled="!settings.backup_monthly_enabled">
-                            <span class="text-body-secondary"><LocaleText t="at"></LocaleText></span>
-                            <input type="time" class="form-control form-control-sm rounded-2" style="width:110px" v-model="settings.backup_monthly_time" :disabled="!settings.backup_monthly_enabled">
+                            <input type="number" class="form-control form-control-sm rounded-2" style="width:70px" min="1" max="28" v-model.number="settings.monthly_day" :disabled="!settings.monthly_enabled">
                             <span class="text-body-secondary ms-2"><LocaleText t="Keep"></LocaleText></span>
-                            <select class="form-select form-select-sm rounded-2" style="width:80px" v-model.number="settings.backup_monthly_keep" :disabled="!settings.backup_monthly_enabled">
+                            <select class="form-select form-select-sm rounded-2" style="width:80px" v-model.number="settings.monthly_keep" :disabled="!settings.monthly_enabled">
                                 <option v-for="n in [1,2,3,6,12]" :key="n" :value="n">{{ n }}</option>
                             </select>
                         </div>
@@ -369,7 +364,7 @@ onMounted(() => {
                                  :style="{ width: storagePercent + '%' }"></div>
                         </div>
                     </div>
-                    <small class="text-body-secondary text-nowrap">{{ storageUsed }} / {{ storageMax }} MB</small>
+                    <small class="text-body-secondary text-nowrap">{{ storageUsed }} / {{ settings.max_storage_mb }} MB</small>
                     <button class="btn btn-sm btn-link p-0 text-body-secondary" @click="storageExpanded = !storageExpanded" title="Storage settings">
                         <i class="bi" :class="storageExpanded ? 'bi-chevron-up' : 'bi-gear'"></i>
                     </button>
@@ -391,7 +386,7 @@ onMounted(() => {
                                 <label class="form-label mb-1" :style="{ fontSize: 'var(--density-font-sm, 0.75rem)' }">
                                     <LocaleText t="Max Storage (MB)"></LocaleText>
                                 </label>
-                                <select class="form-select form-select-sm rounded-2" v-model.number="settings.backup_max_size">
+                                <select class="form-select form-select-sm rounded-2" v-model.number="settings.max_storage_mb">
                                     <option v-for="n in [256, 512, 1024, 2048, 5120, 10240]" :key="n" :value="n">{{ n >= 1024 ? (n/1024) + ' GB' : n + ' MB' }}</option>
                                 </select>
                             </div>
@@ -399,21 +394,21 @@ onMounted(() => {
                                 <label class="form-label mb-1" :style="{ fontSize: 'var(--density-font-sm, 0.75rem)' }">
                                     <LocaleText t="Auto-backup debounce (s)"></LocaleText>
                                 </label>
-                                <select class="form-select form-select-sm rounded-2" v-model.number="settings.backup_auto_debounce">
+                                <select class="form-select form-select-sm rounded-2" v-model.number="settings.auto_backup_debounce_seconds">
                                     <option v-for="n in [5, 15, 30, 60, 120, 300]" :key="n" :value="n">{{ n }}s</option>
                                 </select>
                             </div>
                             <div class="col-12 d-flex gap-3">
                                 <div class="form-check form-switch mb-0">
-                                    <input class="form-check-input" type="checkbox" v-model="settings.backup_auto_on_config_change" role="switch" id="autoConfigSwitch">
+                                    <input class="form-check-input" type="checkbox" v-model="settings.auto_backup_config_changes" role="switch" id="autoConfigSwitch">
                                     <label class="form-check-label" for="autoConfigSwitch" :style="{ fontSize: 'var(--density-font-sm, 0.75rem)' }">
                                         <LocaleText t="Auto-backup on config change"></LocaleText>
                                     </label>
                                 </div>
                                 <div class="form-check form-switch mb-0">
-                                    <input class="form-check-input" type="checkbox" v-model="settings.backup_auto_on_settings_change" role="switch" id="autoSettingsSwitch">
+                                    <input class="form-check-input" type="checkbox" v-model="settings.auto_backup_peer_changes" role="switch" id="autoSettingsSwitch">
                                     <label class="form-check-label" for="autoSettingsSwitch" :style="{ fontSize: 'var(--density-font-sm, 0.75rem)' }">
-                                        <LocaleText t="Auto-backup on settings change"></LocaleText>
+                                        <LocaleText t="Auto-backup on peer change"></LocaleText>
                                     </label>
                                 </div>
                             </div>

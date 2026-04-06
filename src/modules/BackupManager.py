@@ -11,6 +11,7 @@ Supports:
 import hashlib
 import json
 import os
+import re
 import shutil
 import tarfile
 import threading
@@ -388,11 +389,16 @@ class BackupManager:
                             for table in _COMPONENT_TABLE_MAP[comp]:
                                 if table not in dashboard_data:
                                     continue
+                                if not self._is_valid_table_name(table):
+                                    continue
                                 rows = dashboard_data[table]
                                 conn.execute(text(f'DELETE FROM "{table}"'))
                                 if rows:
+                                    cols = list(rows[0].keys())
+                                    col_names = ", ".join(f'"{c}"' for c in cols)
+                                    col_params = ", ".join(f":col_{c}" for c in cols)
                                     conn.execute(
-                                        text(f'INSERT INTO "{table}" VALUES ({", ".join([":col_" + k for k in rows[0].keys()])})'),
+                                        text(f'INSERT INTO "{table}" ({col_names}) VALUES ({col_params})'),
                                         [{f"col_{k}": v for k, v in row.items()} for row in rows],
                                     )
                             restored.append(comp)
@@ -409,11 +415,16 @@ class BackupManager:
                         peers_data = json.load(f)
                     with self.db_engine.connect() as conn:
                         for table, rows in peers_data.items():
+                            if not self._is_valid_table_name(table):
+                                continue
                             try:
                                 conn.execute(text(f'DELETE FROM "{table}"'))
                                 if rows:
+                                    cols = list(rows[0].keys())
+                                    col_names = ", ".join(f'"{c}"' for c in cols)
+                                    col_params = ", ".join(f":col_{c}" for c in cols)
                                     conn.execute(
-                                        text(f'INSERT INTO "{table}" VALUES ({", ".join([":col_" + k for k in rows[0].keys()])})'),
+                                        text(f'INSERT INTO "{table}" ({col_names}) VALUES ({col_params})'),
                                         [{f"col_{k}": v for k, v in row.items()} for row in rows],
                                     )
                             except Exception:  # noqa: BLE001
@@ -464,11 +475,16 @@ class BackupManager:
                         # Skip legacy SQL migration entries
                         if table == "_legacy_sql":
                             continue
+                        if not self._is_valid_table_name(table):
+                            continue
                         try:
                             conn.execute(text(f'DELETE FROM "{table}"'))
                             if rows:
+                                cols = list(rows[0].keys())
+                                col_names = ", ".join(f'"{c}"' for c in cols)
+                                col_params = ", ".join(f":col_{c}" for c in cols)
                                 conn.execute(
-                                    text(f'INSERT INTO "{table}" VALUES ({", ".join([":col_" + k for k in rows[0].keys()])})'),
+                                    text(f'INSERT INTO "{table}" ({col_names}) VALUES ({col_params})'),
                                     [{f"col_{k}": v for k, v in row.items()} for row in rows],
                                 )
                         except Exception:  # noqa: BLE001
@@ -585,6 +601,23 @@ class BackupManager:
     # -----------------------------------------------------------------------
     # Private helpers
     # -----------------------------------------------------------------------
+
+    def _is_valid_table_name(self, name: str) -> bool:
+        """Validate a table name from a backup file before using it in SQL."""
+        valid_globals = {
+            "DashboardWebHooks", "DashboardWebHookSessions", "PeerJobs",
+            "PeerShareLinks", "ConfigurationsInfo", "DashboardClients",
+            "DashboardOIDCClients", "DashboardClientsInfo", "DashboardClientsTOTP",
+            "DashboardClientConfigAccess", "DashboardClientsPeerAssignment",
+            "DashboardAPIKeys", "DashboardClientsPasswordResetLink",
+        }
+        if name in valid_globals:
+            return True
+        # Per-config tables: alphanumeric + hyphens/underscores, optionally with suffix
+        return bool(re.match(
+            r'^[a-zA-Z0-9_-]+(_restrict_access|_transfer|_deleted|_history_endpoint)?$',
+            name,
+        ))
 
     def _timestamp(self) -> str:
         """Return current UTC time as YYYYMMDD_HHMMSS_ffffff (microseconds)."""

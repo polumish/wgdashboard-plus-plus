@@ -88,23 +88,23 @@ class BackupScheduler:
         now = datetime.now(timezone.utc)
 
         # ---- Daily --------------------------------------------------------
-        daily_enabled = self._get_config("BackupSchedules", "daily_enabled")
+        daily_enabled = self._get_config("Backup", "daily_enabled")
         if daily_enabled in (True, "true", "True", "1", 1):
-            daily_time_str = self._get_config("BackupSchedules", "daily_time") or "03:00"
+            daily_time_str = self._get_config("Backup", "daily_time") or "03:00"
             if self._is_daily_due(now, daily_time_str):
                 self._run_scheduled("daily")
 
         # ---- Weekly -------------------------------------------------------
-        weekly_enabled = self._get_config("BackupSchedules", "weekly_enabled")
+        weekly_enabled = self._get_config("Backup", "weekly_enabled")
         if weekly_enabled in (True, "true", "True", "1", 1):
-            weekly_day_str = self._get_config("BackupSchedules", "weekly_day") or "0"
+            weekly_day_str = self._get_config("Backup", "weekly_day") or "sunday"
             if self._is_weekly_due(now, weekly_day_str):
                 self._run_scheduled("weekly")
 
         # ---- Monthly ------------------------------------------------------
-        monthly_enabled = self._get_config("BackupSchedules", "monthly_enabled")
+        monthly_enabled = self._get_config("Backup", "monthly_enabled")
         if monthly_enabled in (True, "true", "True", "1", 1):
-            monthly_day_str = self._get_config("BackupSchedules", "monthly_day") or "1"
+            monthly_day_str = self._get_config("Backup", "monthly_day") or "1"
             if self._is_monthly_due(now, monthly_day_str):
                 self._run_scheduled("monthly")
 
@@ -134,8 +134,12 @@ class BackupScheduler:
     def _is_weekly_due(self, now: datetime, day_str: str) -> bool:
         """Return True if today is the configured weekday and no backup this week."""
         try:
-            target_weekday = int(day_str)  # 0=Monday … 6=Sunday
-        except (ValueError, TypeError):
+            day_names = {
+                "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+                "friday": 4, "saturday": 5, "sunday": 6,
+            }
+            target_weekday = day_names.get(day_str.lower(), int(day_str))
+        except (ValueError, TypeError, AttributeError):
             return False
 
         if now.weekday() != target_weekday:
@@ -176,20 +180,20 @@ class BackupScheduler:
 
             # Read rotation limits from config
             try:
-                daily_keep = int(self._get_config("BackupRotation", "daily_keep") or 7)
+                daily_keep = int(self._get_config("Backup", "daily_keep") or 7)
             except (ValueError, TypeError):
                 daily_keep = 7
             try:
-                weekly_keep = int(self._get_config("BackupRotation", "weekly_keep") or 4)
+                weekly_keep = int(self._get_config("Backup", "weekly_keep") or 4)
             except (ValueError, TypeError):
                 weekly_keep = 4
             try:
-                monthly_keep = int(self._get_config("BackupRotation", "monthly_keep") or 3)
+                monthly_keep = int(self._get_config("Backup", "monthly_keep") or 3)
             except (ValueError, TypeError):
                 monthly_keep = 3
             try:
                 max_storage_mb = float(
-                    self._get_config("BackupRotation", "max_storage_mb") or 500
+                    self._get_config("Backup", "max_storage_mb") or 500
                 )
             except (ValueError, TypeError):
                 max_storage_mb = 500
@@ -214,7 +218,7 @@ class BackupScheduler:
         action:      short verb, e.g. "added", "removed", "updated"
         peer_name:   peer public key or display name
         """
-        enabled = self._get_config("BackupTriggers", "auto_backup_peer_changes")
+        enabled = self._get_config("Backup", "auto_backup_peer_changes")
         if not self._is_truthy(enabled):
             return
         self._debounce_backup(config_name, "event", f"{action}: {peer_name}")
@@ -227,7 +231,7 @@ class BackupScheduler:
         config_name:   WireGuard configuration name
         change_detail: human-readable description of what changed
         """
-        enabled = self._get_config("BackupTriggers", "auto_backup_config_changes")
+        enabled = self._get_config("Backup", "auto_backup_config_changes")
         if not self._is_truthy(enabled):
             return
         self._debounce_backup(config_name, "event", change_detail)
@@ -289,7 +293,7 @@ class BackupScheduler:
 
         try:
             keep = int(
-                self._get_config("BackupRotation", "per_config_keep") or 10
+                self._get_config("Backup", "per_config_keep") or 10
             )
         except (ValueError, TypeError):
             keep = 10

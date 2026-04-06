@@ -112,7 +112,7 @@ onMounted(() => {
 
 				<!-- Header -->
 				<div class="card rounded-3">
-					<div class="card-body d-flex align-items-center gap-2 py-3 px-4">
+					<div class="card-body d-flex align-items-center gap-2" style="padding: var(--density-card-py) var(--density-card-px)">
 						<div>
 							<h4 class="mb-0 d-flex align-items-center gap-2">
 								<i class="bi bi-archive"></i>
@@ -216,7 +216,7 @@ onMounted(() => {
 											<samp class="fw-semibold" style="word-break: break-all;">{{ b.name }}</samp>
 											<span class="badge rounded-pill border"
 											      :class="badgeClass(b.type)"
-											      style="font-size: 0.7rem;">
+											      style="font-size: var(--density-font-sm)">
 												{{ b.type || 'manual' }}
 											</span>
 										</div>
