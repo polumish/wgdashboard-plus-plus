@@ -1688,6 +1688,10 @@ def API_addPeers(configName):
                 peerType = int(data.get('is_gateway', 0) or 0)
                 if peerType not in (0, 1, 2):
                     peerType = 0
+                try:
+                    AllBackupScheduler.onPeerChange(configName, "peer_added", name or public_key)
+                except Exception:
+                    pass
                 status, addedPeers, message = config.addPeers([
                     {
                         "name": name,
