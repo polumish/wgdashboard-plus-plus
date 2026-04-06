@@ -43,7 +43,7 @@ export default {
 <template>
 	<div class="card shadow-sm rounded-3 peerCard"
 		 :id="'peer_'+Peer.id"
-		:class="{'border-warning': Peer.restricted, 'gateway-card': Peer.is_gateway}">
+		:class="{'border-warning': Peer.restricted, 'gateway-card': Peer.is_gateway === true || Peer.is_gateway === 1, 'server-card': Peer.is_gateway === 2}">
 		<div>
 			<div v-if="!Peer.restricted" class="card-header bg-transparent d-flex align-items-center gap-2 border-0">
 				<div class="dot ms-0" :class="{active: Peer.status === 'running'}"></div>
@@ -81,8 +81,11 @@ export default {
 		</div>
 		<div class="card-body pt-1" style="font-size: 0.9rem">
 			<h6>
-				<span v-if="Peer.is_gateway" class="badge bg-danger-subtle text-danger-emphasis rounded-3 me-1" title="Gateway">
+				<span v-if="Peer.is_gateway === true || Peer.is_gateway === 1" class="badge bg-info-subtle text-info-emphasis rounded-3 me-1" title="Gateway">
 					<i class="bi bi-router"></i> GW
+				</span>
+				<span v-else-if="Peer.is_gateway === 2" class="badge bg-success-subtle text-success-emphasis rounded-3 me-1" title="Server">
+					<i class="bi bi-hdd-rack"></i> SRV
 				</span>
 				{{Peer.name ? Peer.name : GetLocale('Untitled Peer')}}
 			</h6>
@@ -155,7 +158,11 @@ export default {
 }
 
 .gateway-card{
-	border-left: 3px solid var(--bs-danger) !important;
-	background-color: rgba(220, 53, 69, 0.03);
+	border-left: 3px solid var(--bs-info) !important;
+	background-color: rgba(13, 202, 240, 0.03);
+}
+.server-card{
+	border-left: 3px solid var(--bs-success) !important;
+	background-color: rgba(25, 135, 84, 0.03);
 }
 </style>

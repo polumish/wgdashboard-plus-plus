@@ -1179,7 +1179,7 @@ def API_getAllGateways():
     gateways = []
     for cfgName, wc in WireguardConfigurations.items():
         for p in wc.Peers:
-            if getattr(p, 'is_gateway', False):
+            if getattr(p, 'is_gateway', 0) in (True, 1, 2):
                 gateways.append({
                     "configName": cfgName,
                     "id": p.id,
@@ -1193,6 +1193,7 @@ def API_getAllGateways():
                     "total_sent": p.total_sent,
                     "cumu_receive": p.cumu_receive,
                     "cumu_sent": p.cumu_sent,
+                    "is_gateway": getattr(p, 'is_gateway', 0),
                 })
     return ResponseObject(True, data=gateways)
 
@@ -1359,7 +1360,10 @@ def API_setPeerGatewayFlag(configName: str):
         return ResponseObject(False, "Configuration does not exist")
     data = request.get_json() or {}
     peerId = data.get('id')
-    flag = 1 if data.get('is_gateway') else 0
+    rawFlag = data.get('is_gateway')
+    flag = int(rawFlag) if rawFlag is not None and str(rawFlag).isdigit() else (1 if rawFlag else 0)
+    if flag not in (0, 1, 2):
+        flag = 0
     if not peerId:
         return ResponseObject(False, "Peer id required")
     wc = WireguardConfigurations[configName]

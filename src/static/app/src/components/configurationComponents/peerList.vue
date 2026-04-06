@@ -241,10 +241,11 @@ const searchPeers = computed(() => {
 	}
 
 
-	// Gateways always on top
-	const gateways = re.filter(p => p.is_gateway)
-	const regular = re.filter(p => !p.is_gateway)
-	return [...gateways, ...regular]
+	// Sort by device type: gateways → servers → clients
+	const gateways = re.filter(p => p.is_gateway === true || p.is_gateway === 1)
+	const servers = re.filter(p => p.is_gateway === 2)
+	const clients = re.filter(p => !p.is_gateway || p.is_gateway === 0)
+	return [...gateways, ...servers, ...clients]
 })
 
 const _handshakeToTimestamp = (hs) => {
@@ -279,7 +280,10 @@ const tableSortedPeers = computed(() => {
 		if (va < vb) return asc ? -1 : 1
 		if (va > vb) return asc ? 1 : -1
 		return 0
-	}).sort((a, b) => (b.is_gateway ? 1 : 0) - (a.is_gateway ? 1 : 0))
+	}).sort((a, b) => {
+		const typeOrder = (p) => p.is_gateway === true || p.is_gateway === 1 ? 0 : p.is_gateway === 2 ? 1 : 2
+		return typeOrder(a) - typeOrder(b)
+	})
 })
 
 const columnsLeftPeers = computed(() => {
@@ -544,7 +548,7 @@ watch(() => route.query.id, (newValue) => {
 				</thead>
 				<tbody>
 					<tr v-for="peer in tableSortedPeers" :key="peer.id"
-						:class="{'table-warning': peer.restricted, 'gateway-row': peer.is_gateway}"
+						:class="{'table-warning': peer.restricted, 'gateway-row': peer.is_gateway === true || peer.is_gateway === 1, 'server-row': peer.is_gateway === 2}"
 						role="button"
 						@click="configurationModals.peerSetting.modalOpen = true; configurationModalSelectedPeer = peer">
 						<td>
@@ -560,8 +564,11 @@ watch(() => route.query.id, (newValue) => {
 						</td>
 						<td>
 							<strong class="d-block" style="font-size: 0.85rem">
-								<span v-if="peer.is_gateway" class="badge bg-danger-subtle text-danger-emphasis rounded-3 me-1" title="Gateway" style="font-size: 0.65rem;">
+								<span v-if="peer.is_gateway === true || peer.is_gateway === 1" class="badge bg-info-subtle text-info-emphasis rounded-3 me-1" title="Gateway" style="font-size: 0.65rem;">
 									<i class="bi bi-router"></i> GW
+								</span>
+								<span v-else-if="peer.is_gateway === 2" class="badge bg-success-subtle text-success-emphasis rounded-3 me-1" title="Server" style="font-size: 0.65rem;">
+									<i class="bi bi-hdd-rack"></i> SRV
 								</span>
 								{{ peer.name || 'Untitled' }}
 							</strong>
@@ -621,7 +628,7 @@ watch(() => route.query.id, (newValue) => {
 					</thead>
 					<tbody>
 						<tr v-for="peer in half" :key="peer.id"
-							:class="{'table-warning': peer.restricted, 'gateway-row': peer.is_gateway}"
+							:class="{'table-warning': peer.restricted, 'gateway-row': peer.is_gateway === true || peer.is_gateway === 1, 'server-row': peer.is_gateway === 2}"
 							role="button"
 							@click="configurationModals.peerSetting.modalOpen = true; configurationModalSelectedPeer = peer">
 							<td style="padding: 0.25rem;">
@@ -631,8 +638,11 @@ watch(() => route.query.id, (newValue) => {
 							</td>
 							<td>
 								<strong style="font-size: 0.82rem;">
-									<span v-if="peer.is_gateway" class="badge bg-danger-subtle text-danger-emphasis rounded-3 me-1" title="Gateway" style="font-size: 0.62rem;">
+									<span v-if="peer.is_gateway === true || peer.is_gateway === 1" class="badge bg-info-subtle text-info-emphasis rounded-3 me-1" title="Gateway" style="font-size: 0.62rem;">
 										<i class="bi bi-router"></i> GW
+									</span>
+									<span v-else-if="peer.is_gateway === 2" class="badge bg-success-subtle text-success-emphasis rounded-3 me-1" title="Server" style="font-size: 0.62rem;">
+										<i class="bi bi-hdd-rack"></i> SRV
 									</span>
 									{{ peer.name || 'Untitled' }}
 								</strong>
@@ -787,10 +797,16 @@ th, td{
 }
 
 tr.gateway-row > td:first-child {
-	box-shadow: inset 3px 0 0 0 var(--bs-danger);
+	box-shadow: inset 3px 0 0 0 var(--bs-info);
 }
 tr.gateway-row {
-	background-color: rgba(220, 53, 69, 0.04) !important;
+	background-color: rgba(13, 202, 240, 0.04) !important;
+}
+tr.server-row > td:first-child {
+	box-shadow: inset 3px 0 0 0 var(--bs-success);
+}
+tr.server-row {
+	background-color: rgba(25, 135, 84, 0.04) !important;
 }
 
 @media screen and (max-width: 576px) {

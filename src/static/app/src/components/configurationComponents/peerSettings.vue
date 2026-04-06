@@ -112,18 +112,18 @@ export default {
 				}
 			})
 		},
-		toggleGateway(){
+		setPeerType(typeVal){
 			this.saving = true
-			const newVal = !this.data.is_gateway
 			fetchPost(`/api/setPeerGatewayFlag/${this.$route.params.id}`, {
 				id: this.data.id,
-				is_gateway: newVal
+				is_gateway: typeVal
 			}, (res) => {
 				this.saving = false
 				if (res.status){
-					this.data.is_gateway = newVal
+					this.data.is_gateway = typeVal
+					const labels = {0: 'Client', 1: 'Gateway', 2: 'Server'}
 					this.dashboardConfigurationStore.newMessage("Server",
-						newVal ? "Peer marked as gateway" : "Gateway flag removed", "success")
+						`Device type set to ${labels[typeVal]}`, "success")
 					this.$emit("refresh")
 				}else{
 					this.dashboardConfigurationStore.newMessage("Server", res.message, "danger")
@@ -296,21 +296,19 @@ export default {
 							<hr>
 							<div class="d-flex gap-2 align-items-center">
 								<strong>
-									<i class="bi bi-router me-2"></i>
-									<LocaleText t="Mark as Gateway"></LocaleText>
+									<i class="bi bi-tag me-2"></i>
+									<LocaleText t="Device Type"></LocaleText>
 								</strong>
-								<small class="text-muted ms-2">
-									<LocaleText t="Show this peer in the Gateways view"></LocaleText>
-								</small>
-								<div class="form-check form-switch ms-auto mb-0">
-									<input class="form-check-input" type="checkbox" role="switch"
-										:id="'peerGatewayToggle_' + this.data.id"
-										:checked="this.data.is_gateway"
-										:disabled="this.saving"
-										@change="this.toggleGateway()">
-								</div>
+								<select class="form-select form-select-sm rounded-3 ms-auto" style="width: 160px;"
+									:disabled="this.saving"
+									:value="this.data.is_gateway === true ? 1 : (this.data.is_gateway || 0)"
+									@change="this.setPeerType(parseInt($event.target.value))">
+									<option :value="0">Client</option>
+									<option :value="2">Server</option>
+									<option :value="1">Gateway</option>
+								</select>
 							</div>
-							<div v-if="this.data.is_gateway" class="mt-2">
+							<div v-if="this.data.is_gateway === 1 || this.data.is_gateway === true" class="mt-2">
 								<button class="btn btn-sm bg-info-subtle text-info-emphasis rounded-3 w-100"
 										:disabled="this.opnsenseLoading"
 										@click="this.showOPNsenseSetup()">
