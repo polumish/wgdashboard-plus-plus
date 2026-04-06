@@ -37,6 +37,7 @@ export default {
 				PostUp: "",
 				PostDown: "",
 				Table: "",
+				NetworkMode: "mesh",
 				Protocol: "wg",
 				Jc: 5,
 				Jmin: 49,
@@ -369,6 +370,40 @@ export default {
 					</div>
 				</div>
 				
+				<div class="card rounded-3 shadow mt-3">
+					<div class="card-header">
+						<LocaleText t="Network Mode"></LocaleText>
+					</div>
+					<div class="card-body">
+						<div class="d-flex flex-column gap-2">
+							<div class="form-check">
+								<input class="form-check-input" type="radio" id="modeMesh"
+									   value="mesh" v-model="this.newConfiguration.NetworkMode">
+								<label class="form-check-label" for="modeMesh">
+									<strong><i class="bi bi-diagram-3 me-1"></i> Mesh</strong>
+									<small class="text-muted ms-2"><LocaleText t="All peers see each other. AllowedIPs = tunnel subnet."></LocaleText></small>
+								</label>
+							</div>
+							<div class="form-check">
+								<input class="form-check-input" type="radio" id="modeP2S"
+									   value="point-to-site" v-model="this.newConfiguration.NetworkMode">
+								<label class="form-check-label" for="modeP2S">
+									<strong><i class="bi bi-broadcast me-1"></i> Point-to-Site</strong>
+									<small class="text-muted ms-2"><LocaleText t="Peers see only the server. AllowedIPs = server IP only."></LocaleText></small>
+								</label>
+							</div>
+							<div class="form-check">
+								<input class="form-check-input" type="radio" id="modeGateway"
+									   value="gateway" v-model="this.newConfiguration.NetworkMode">
+								<label class="form-check-label" for="modeGateway">
+									<strong><i class="bi bi-router me-1"></i> Gateway</strong>
+									<small class="text-muted ms-2"><LocaleText t="Full tunnel. All traffic routed through VPN. AllowedIPs = 0.0.0.0/0."></LocaleText></small>
+								</label>
+							</div>
+						</div>
+					</div>
+				</div>
+
 				<hr>
 				<div class="accordion" id="newConfigurationOptionalAccordion">
 					<div class="accordion-item">

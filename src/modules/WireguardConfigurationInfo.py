@@ -22,3 +22,4 @@ class WireguardConfigurationInfo(BaseModel):
     PeerTrafficTracking: bool = True
     PeerHistoricalEndpointTracking: bool = True
     RoutedLANSubnets: str = ''
+    NetworkMode: str = 'mesh'  # 'mesh' or 'gateway'

@@ -498,6 +498,25 @@ def API_addWireguardConfiguration():
         WireguardConfigurations[data['ConfigurationName']] = (
             WireguardConfiguration(DashboardConfig, AllPeerJobs, AllPeerShareLinks, DashboardWebHooks, data=data)) if data.get('Protocol') == 'wg' else (
             AmneziaWireguardConfiguration(DashboardConfig, AllPeerJobs, AllPeerShareLinks, DashboardWebHooks, data=data))
+    # Apply NetworkMode
+    newWc = WireguardConfigurations.get(data['ConfigurationName'])
+    if newWc:
+        networkMode = data.get('NetworkMode', 'mesh')
+        newWc.configurationInfo.NetworkMode = networkMode
+        if networkMode == 'gateway':
+            newWc.configurationInfo.OverridePeerSettings.EndpointAllowedIPs = '0.0.0.0/0'
+        elif networkMode == 'point-to-site':
+            # Only server's own IP (/32), not the whole subnet
+            serverAddr = (newWc.Address or '').split(',')[0].strip()
+            if '/' in serverAddr:
+                import ipaddress as _ipaddress
+                try:
+                    serverIp = str(_ipaddress.ip_interface(serverAddr).ip)
+                    newWc.configurationInfo.OverridePeerSettings.EndpointAllowedIPs = f'{serverIp}/32'
+                except ValueError:
+                    pass
+        # mesh: leave empty — per-peer default = config subnet (handled in addPeers)
+        newWc.storeConfigurationInfo()
     return ResponseObject()
 
 @app.get(f'{APP_PREFIX}/api/toggleWireguardConfiguration')
@@ -1371,10 +1390,22 @@ def API_addPeers(configName):
             allowed_ips: list[str] = data.get('allowed_ips', [])
             allowed_ips_validation: bool = data.get('allowed_ips_validation', True)
             
-            # Default endpoint_allowed_ip = config's tunnel subnet (mesh), not 0.0.0.0/0
-            _configDefaultEAIP = _configSubnetForPolicy(WireguardConfigurations[configName]) or DashboardConfig.GetConfig("Peers", "peer_endpoint_allowed_ip")[1]
+            # Default endpoint_allowed_ip depends on NetworkMode
+            _wc = WireguardConfigurations[configName]
+            _mode = getattr(_wc.configurationInfo, 'NetworkMode', 'mesh')
+            if _mode == 'gateway':
+                _configDefaultEAIP = '0.0.0.0/0'
+            elif _mode == 'point-to-site':
+                _addr = (_wc.Address or '').split(',')[0].strip()
+                try:
+                    import ipaddress as _ipaddress
+                    _configDefaultEAIP = f'{_ipaddress.ip_interface(_addr).ip}/32'
+                except (ValueError, Exception):
+                    _configDefaultEAIP = _addr
+            else:  # mesh
+                _configDefaultEAIP = _configSubnetForPolicy(_wc) or DashboardConfig.GetConfig("Peers", "peer_endpoint_allowed_ip")[1]
             endpoint_allowed_ip: str = data.get('endpoint_allowed_ip', _configDefaultEAIP)
-            if endpoint_allowed_ip == '0.0.0.0/0':
+            if endpoint_allowed_ip == '0.0.0.0/0' and _mode != 'gateway':
                 endpoint_allowed_ip = _configDefaultEAIP
             dns_addresses: str = data.get('DNS', DashboardConfig.GetConfig("Peers", "peer_global_DNS")[1])
             
