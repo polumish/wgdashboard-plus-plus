@@ -930,6 +930,10 @@ def API_updatePeerSettings(configName):
         wireguardConfig = WireguardConfigurations[configName]
         foundPeer, peer = wireguardConfig.searchPeer(id)
         if foundPeer:
+            try:
+                AllBackupScheduler.onPeerChange(configName, "peer_updated", name or id)
+            except Exception:
+                pass
             if wireguardConfig.Protocol == 'wg':
                 status, msg = peer.updatePeer(name, private_key, preshared_key, dns_addresses,
                                        allowed_ip, endpoint_allowed_ip, mtu, keepalive)
