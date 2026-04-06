@@ -1118,8 +1118,8 @@ def _syncGatewaySubnetsToConfig(wc):
                     lanSubnets.add(part)
                 except (ValueError, TypeError):
                     lanSubnets.add(part)
-        elif peerType == 2:
-            # Server: add its WG IP as /32
+        elif peerType == 2 and mode == 'point-to-site':
+            # Server in P2S: add its WG IP as /32 (in mesh, /24 covers it)
             firstIp = (p.allowed_ip or '').split(',')[0].strip()
             if firstIp:
                 try:
@@ -1127,10 +1127,16 @@ def _syncGatewaySubnetsToConfig(wc):
                     lanSubnets.add(f'{ip}/32')
                 except ValueError:
                     lanSubnets.add(firstIp)
-    # Always include the tunnel subnet so peers can see each other (mesh)
-    tunnelSubnet = _configSubnetForPolicy(wc)
-    if tunnelSubnet:
-        lanSubnets.add(tunnelSubnet)
+    # Mode-aware: mesh gets tunnel subnet, gateway mode keeps 0.0.0.0/0
+    mode = getattr(wc.configurationInfo, 'NetworkMode', 'mesh')
+    if mode == 'gateway':
+        # Full tunnel — override stays 0.0.0.0/0, don't touch
+        return '0.0.0.0/0'
+    if mode == 'mesh':
+        tunnelSubnet = _configSubnetForPolicy(wc)
+        if tunnelSubnet:
+            lanSubnets.add(tunnelSubnet)
+    # point-to-site: no tunnel subnet, only server /32s + gateway LANs
     lanStr = ', '.join(sorted(lanSubnets)) if lanSubnets else ''
     # Update EndpointAllowedIPs
     wc.configurationInfo.OverridePeerSettings.EndpointAllowedIPs = lanStr
