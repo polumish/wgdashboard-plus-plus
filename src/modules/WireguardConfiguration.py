@@ -602,20 +602,33 @@ class WireguardConfiguration:
                     conn.execute(
                         self.peersTable.insert().values(newPeer)
                     )
-            for p in peers:
-                presharedKeyExist = len(p['preshared_key']) > 0
-                rd = random.Random()
-                uid = str(uuid.UUID(int=rd.getrandbits(128), version=4))
-                if presharedKeyExist:
-                    with open(uid, "w+") as f:
-                        f.write(p['preshared_key'])
-
-                subprocess.check_output(f"{self.Protocol} set {self.Name} peer {p['id']} allowed-ips {p['allowed_ip'].replace(' ', '')}{f' preshared-key {uid}' if presharedKeyExist else ''}",
-                                        shell=True, stderr=subprocess.STDOUT)
-                if presharedKeyExist:
-                    os.remove(uid)
-            subprocess.check_output(
-                f"{self.Protocol}-quick save {self.Name}", shell=True, stderr=subprocess.STDOUT)
+            if self.getStatus():
+                # Interface is running — apply peers live via wg set
+                for p in peers:
+                    presharedKeyExist = len(p['preshared_key']) > 0
+                    rd = random.Random()
+                    uid = str(uuid.UUID(int=rd.getrandbits(128), version=4))
+                    if presharedKeyExist:
+                        with open(uid, "w+") as f:
+                            f.write(p['preshared_key'])
+                    subprocess.check_output(
+                        f"{self.Protocol} set {self.Name} peer {p['id']} "
+                        f"allowed-ips {p['allowed_ip'].replace(' ', '')}"
+                        f"{f' preshared-key {uid}' if presharedKeyExist else ''}",
+                        shell=True, stderr=subprocess.STDOUT)
+                    if presharedKeyExist:
+                        os.remove(uid)
+                subprocess.check_output(
+                    f"{self.Protocol}-quick save {self.Name}", shell=True, stderr=subprocess.STDOUT)
+            else:
+                # Interface is DOWN — write [Peer] blocks directly into .conf
+                # so wg-quick up will pick them up automatically
+                with open(self.configPath, 'a') as f:
+                    for p in peers:
+                        f.write(f"\n[Peer]\nPublicKey = {p['id']}\n")
+                        f.write(f"AllowedIPs = {p['allowed_ip'].replace(' ', '')}\n")
+                        if p.get('preshared_key'):
+                            f.write(f"PresharedKey = {p['preshared_key']}\n")
             self.getPeers()
             for p in peers:
                 p = self.searchPeer(p['id'])
