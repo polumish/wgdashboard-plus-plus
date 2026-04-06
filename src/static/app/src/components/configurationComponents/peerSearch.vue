@@ -10,6 +10,7 @@ import PeerTag from "@/components/configurationComponents/peerTag.vue";
 export default {
 	name: "peerSearch",
 	components: {PeerTag, LocaleText},
+	emits: ['search', 'jobsAll', 'jobLogs', 'selectPeers', 'editConfiguration', 'backupRestore', 'deleteConfiguration', 'backups'],
 	setup(){
 		const store = DashboardConfigurationStore();
 		const wireguardConfigurationStore = WireguardConfigurationsStore()
@@ -199,6 +200,12 @@ export default {
 			        type="button" aria-expanded="false">
 				<i class="bi bi-person-walking me-2 me-lg-0 me-xl-2"></i>
 				<LocaleText t="Active Jobs" class="d-sm-block d-lg-none d-xl-block"></LocaleText>
+			</button>
+			<button class="btn btn-sm text-warning-emphasis bg-warning-subtle rounded-3 border-1 border-warning-subtle"
+			        @click="this.$emit('backups')"
+			        type="button">
+				<i class="bi bi-archive me-2 me-lg-0 me-xl-2"></i>
+				<LocaleText t="Backups" class="d-sm-block d-lg-none d-xl-block"></LocaleText>
 			</button>
 		</div>
 	</div>

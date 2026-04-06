@@ -9,7 +9,6 @@ import UpdateConfigurationName
 import EditRawConfigurationFile
 	from "@/components/configurationComponents/editConfigurationComponents/editRawConfigurationFile.vue";
 import DeleteConfiguration from "@/components/configurationComponents/deleteConfiguration.vue";
-import ConfigurationBackupRestore from "@/components/configurationComponents/configurationBackupRestore.vue";
 import EditPeerSettingsOverride
 	from "@/components/configurationComponents/editConfigurationComponents/editPeerSettingsOverride.vue";
 const props = defineProps({
@@ -62,7 +61,6 @@ watch(data, () => {
 })
 
 const editRawConfigurationFileModal = ref(false)
-const backupRestoreModal = ref(false)
 const deleteConfigurationModal = ref(false)
 
 
@@ -79,15 +77,9 @@ const deleteConfigurationModal = ref(false)
 				</EditRawConfigurationFile>
 				<DeleteConfiguration
 					key="DeleteConfiguration"
-					@backup="backupRestoreModal = true"
 					@close="deleteConfigurationModal = false"
 					v-if="deleteConfigurationModal">
 				</DeleteConfiguration>
-				<ConfigurationBackupRestore
-					@close="backupRestoreModal = false"
-					@refreshPeersList="emit('refresh')"
-					v-if="backupRestoreModal">
-				</ConfigurationBackupRestore>
 			</TransitionGroup>
 
 			<div class="container d-flex h-100 w-100">
@@ -235,12 +227,6 @@ const deleteConfigurationModal = ref(false)
 										<LocaleText t="Danger Zone"></LocaleText>
 									</h5>
 									<div class="d-flex gap-2 flex-column">
-										<button
-											@click="backupRestoreModal = true"
-											class="btn bg-warning-subtle border-warning-subtle text-warning-emphasis rounded-3 text-start d-flex">
-											<i class="bi bi-copy me-auto"></i>
-											<LocaleText t="Backup & Restore"></LocaleText>
-										</button>
 										<button
 											@click="editRawConfigurationFileModal = true"
 											class="btn bg-warning-subtle border-warning-subtle text-warning-emphasis rounded-3 d-flex">

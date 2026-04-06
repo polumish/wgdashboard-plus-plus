@@ -5,6 +5,31 @@ All notable changes to WgDashboard++ will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to a custom versioning scheme: **X.YZ** where X=major, Y=feature (+0.1), Z=bugfix (+0.01).
 
+## [v1.4] - 2026-04-06
+
+### Added
+- **Backup & Restore** — complete two-level backup system:
+  - **Global Snapshots** (Settings → Backup & Restore) — full dashboard backup including all WireGuard configs, peer data, dashboard settings, webhooks, peer jobs, share links, client portal, and API keys
+  - **Scheduled backups** — configurable daily/weekly/monthly with independent toggles, time/day selectors, and per-type retention limits (GFS rotation scheme)
+  - **Per-config auto-backups** — automatic backup before any peer or config change (add/delete/restrict/allow peer, update peer settings, change interface config, edit RoutedLAN/NetworkMode). Cooldown prevents duplicates during bulk operations
+  - **Granular restore** — select individual components to restore (configurations, settings, webhooks, peer jobs, share links, client portal, API keys) via checkbox tree in restore modal
+  - **Restore points** — automatic backup of current state created before every restore operation, providing an undo safety net
+  - **Calendar view** — month-based calendar with color-coded dots (green=daily, yellow=weekly, cyan=monthly, gray=manual, orange=auto). Click any day to see that day's backups
+  - **Table view** — compact sortable list with filter pills (All/Daily/Weekly/Monthly/Auto)
+  - **Per-config backup panel** — accessible via "Backups" button in configuration action bar (after Active Jobs), shows auto-triggered and global backups for that specific config
+  - **Storage management** — configurable max storage size, visual progress bar, backup path configuration
+  - **Integrity verification** — SHA-256 checksums for every file in backup, verified before any restore
+  - **JSON backup format** — database-agnostic (works across SQLite/PostgreSQL/MySQL), structured directories with manifest.json
+  - **Legacy migration** — existing WGDashboard_Backup/ files automatically converted to new format on first startup
+  - **Download** — backups downloadable as .tar.gz archives
+  - **Density support** — all backup UI respects Compact/Normal/Comfortable display density setting
+
+### Changed
+- Old per-config backup UI removed from Configuration Settings (replaced by new system)
+
+### Fixed
+- `deleteBackup()` previously only deleted .conf file, leaving orphaned .sql files
+
 ## [v1.3] - 2026-04-06
 
 ### Added

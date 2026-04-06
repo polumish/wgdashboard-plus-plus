@@ -65,6 +65,14 @@ const router = createRouter({
                             meta: {
                                 title: "WireGuard Configuration Settings"
                             }
+                        },
+                        {
+                            name: "Backup & Restore",
+                            path: "backup",
+                            component: () => import("@/components/settingsComponent/backupSettings.vue"),
+                            meta: {
+                                title: "Backup & Restore"
+                            }
                         }
                     ],
 					meta: {

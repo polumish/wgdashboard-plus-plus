@@ -40,6 +40,9 @@ from modules.DashboardClients import DashboardClients
 from modules.DashboardPlugins import DashboardPlugins
 from modules.DashboardWebHooks import DashboardWebHooks
 from modules.NewConfigurationTemplates import NewConfigurationTemplates
+from modules.BackupManager import BackupManager
+from modules.BackupScheduler import BackupScheduler
+from modules.BackupMigration import migrate_legacy_backups
 
 class CustomJsonEncoder(DefaultJSONProvider):
     def __init__(self, app):
@@ -174,6 +177,9 @@ def startThreads():
     scheduleJobThread = threading.Thread(target=peerJobScheduleBackgroundThread, daemon=True)
     scheduleJobThread.start()
 
+AllBackupManager: BackupManager = None
+AllBackupScheduler: BackupScheduler = None
+
 dictConfig({
     'version': 1,
     'formatters': {'default': {
@@ -216,6 +222,30 @@ with app.app_context():
     DashboardClients: DashboardClients = DashboardClients(WireguardConfigurations)
     app.register_blueprint(createClientBlueprint(WireguardConfigurations, DashboardConfig, DashboardClients))
     _applySessionTimeout()
+
+with app.app_context():
+    _backup_path_status, _backup_path = DashboardConfig.GetConfig("Backup", "backup_path")
+    if not _backup_path:
+        _backup_path = os.path.join(CONFIGURATION_PATH, "backups")
+    _, _wg_conf_path = DashboardConfig.GetConfig("Server", "wg_conf_path")
+    _, _awg_conf_path = DashboardConfig.GetConfig("Server", "awg_conf_path")
+    _ini_path = os.path.join(CONFIGURATION_PATH, "wg-dashboard.ini")
+
+    from modules.ConnectionString import ConnectionString
+    _db_engine = sqlalchemy.create_engine(ConnectionString("wgdashboard"))
+
+    AllBackupManager = BackupManager(
+        backup_path=_backup_path,
+        wg_conf_path=_wg_conf_path,
+        awg_conf_path=_awg_conf_path,
+        ini_path=_ini_path,
+        db_engine=_db_engine
+    )
+
+    migrate_legacy_backups(_wg_conf_path, _awg_conf_path, _backup_path)
+
+    AllBackupScheduler = BackupScheduler(AllBackupManager, DashboardConfig)
+    AllBackupScheduler.start()
 
 _, APP_PREFIX = DashboardConfig.GetConfig("Server", "app_prefix")
 cors = CORS(app, resources={rf"{APP_PREFIX}/api/*": {
@@ -539,8 +569,11 @@ def API_updateWireguardConfiguration():
     if name not in WireguardConfigurations.keys():
         return ResponseObject(False, "Configuration does not exist", status_code=404)
     
+    try:
+        AllBackupScheduler.onConfigChange(data.get("Name", ""), "config_updated")
+    except Exception:
+        pass
     status, msg = WireguardConfigurations[name].updateConfigurationSettings(data)
-    
     return ResponseObject(status, message=msg, data=WireguardConfigurations[name])
 
 @app.post(f'{APP_PREFIX}/api/updateWireguardConfigurationInfo')
@@ -553,9 +586,13 @@ def API_updateWireguardConfigurationInfo():
         return ResponseObject(status=False, message="Please provide configuration name, key and value")
     if name not in WireguardConfigurations.keys():
         return ResponseObject(False, "Configuration does not exist", status_code=404)
-    
+
+    try:
+        AllBackupScheduler.onConfigChange(name, f"info_updated: {key}")
+    except Exception:
+        pass
     status, msg, key = WireguardConfigurations[name].updateConfigurationInfo(key, value)
-    
+
     return ResponseObject(status=status, message=msg, data=key)
 
 @app.get(f'{APP_PREFIX}/api/getWireguardConfigurationRawFile')
@@ -580,7 +617,11 @@ def API_UpdateWireguardConfigurationRawFile():
         return ResponseObject(False, "Please provide a valid configuration name")
     if rawConfiguration is None or len(rawConfiguration) == 0:
         return ResponseObject(False, "Please provide content")
-    
+
+    try:
+        AllBackupScheduler.onConfigChange(configurationName, "raw_config_updated")
+    except Exception:
+        pass
     status, err = WireguardConfigurations[configurationName].updateRawConfigurationFile(rawConfiguration)
 
     return ResponseObject(status=status, message=err)
@@ -730,7 +771,103 @@ def API_restoreWireguardConfigurationBackup():
     
     status = WireguardConfigurations[configurationName].restoreBackup(backupFileName)
     return ResponseObject(status=status, message=(None if status else 'Restore backup failed'))
-    
+
+# === New Backup API Routes ===
+
+@app.get(f'{APP_PREFIX}/api/backup/global/list')
+def API_backup_global_list():
+    filter_type = request.args.get("filter", None)
+    if filter_type == "all":
+        filter_type = None
+    return ResponseObject(data=AllBackupManager.getGlobalSnapshots(filter_type=filter_type))
+
+@app.get(f'{APP_PREFIX}/api/backup/global/create')
+def API_backup_global_create():
+    result = AllBackupManager.createGlobalSnapshot(trigger="manual")
+    return ResponseObject(status=result["status"], data=result)
+
+@app.post(f'{APP_PREFIX}/api/backup/global/delete')
+def API_backup_global_delete():
+    data = request.get_json()
+    name = data.get("name", "")
+    return ResponseObject(status=AllBackupManager.deleteGlobalSnapshot(name))
+
+@app.get(f'{APP_PREFIX}/api/backup/global/download')
+def API_backup_global_download():
+    name = request.args.get("name", "")
+    success, path = AllBackupManager.downloadGlobalSnapshot(name)
+    if success and path:
+        return send_file(path, as_attachment=True)
+    return ResponseObject(status=False, message="Snapshot not found")
+
+@app.post(f'{APP_PREFIX}/api/backup/global/restore')
+def API_backup_global_restore():
+    data = request.get_json()
+    name = data.get("name", "")
+    components = data.get("components", [])
+    result = AllBackupManager.restoreFromSnapshot(name, components)
+    return ResponseObject(status=result["status"], message=result.get("message", ""), data=result.get("restored", []))
+
+@app.get(f'{APP_PREFIX}/api/backup/config/list')
+def API_backup_config_list():
+    config_name = request.args.get("configName", "")
+    return ResponseObject(data=AllBackupManager.getConfigBackups(config_name))
+
+@app.get(f'{APP_PREFIX}/api/backup/config/create')
+def API_backup_config_create():
+    config_name = request.args.get("configName", "")
+    result = AllBackupManager.createConfigBackup(config_name, trigger="manual")
+    return ResponseObject(status=result["status"], data=result)
+
+@app.post(f'{APP_PREFIX}/api/backup/config/delete')
+def API_backup_config_delete():
+    data = request.get_json()
+    config_name = data.get("configName", "")
+    name = data.get("name", "")
+    return ResponseObject(status=AllBackupManager.deleteConfigBackup(config_name, name))
+
+@app.get(f'{APP_PREFIX}/api/backup/config/download')
+def API_backup_config_download():
+    config_name = request.args.get("configName", "")
+    name = request.args.get("name", "")
+    success, path = AllBackupManager.downloadConfigBackup(config_name, name)
+    if success and path:
+        return send_file(path, as_attachment=True)
+    return ResponseObject(status=False, message="Backup not found")
+
+@app.post(f'{APP_PREFIX}/api/backup/config/restore')
+def API_backup_config_restore():
+    data = request.get_json()
+    config_name = data.get("configName", "")
+    name = data.get("name", "")
+    result = AllBackupManager.restoreConfigBackup(config_name, name)
+    return ResponseObject(status=result.get("status", False), message=result.get("message", ""))
+
+@app.get(f'{APP_PREFIX}/api/backup/settings')
+def API_backup_settings():
+    keys = ["backup_path", "daily_enabled", "daily_time", "daily_keep",
+            "weekly_enabled", "weekly_day", "weekly_keep",
+            "monthly_enabled", "monthly_day", "monthly_keep",
+            "max_storage_mb", "auto_backup_peer_changes", "auto_backup_config_changes",
+            "auto_backup_debounce_seconds", "auto_backup_max_wait_seconds", "per_config_keep"]
+    settings = {}
+    for key in keys:
+        _, value = DashboardConfig.GetConfig("Backup", key)
+        settings[key] = value
+    return ResponseObject(data=settings)
+
+@app.post(f'{APP_PREFIX}/api/backup/settings/update')
+def API_backup_settings_update():
+    data = request.get_json()
+    for key, value in data.items():
+        # Pass booleans directly so SetConfig handles them correctly
+        if isinstance(value, bool):
+            DashboardConfig.SetConfig("Backup", key, value)
+        else:
+            DashboardConfig.SetConfig("Backup", key, str(value))
+    DashboardConfig.SaveConfig()
+    return ResponseObject(status=True)
+
 @app.get(f'{APP_PREFIX}/api/getDashboardConfiguration')
 def API_getDashboardConfiguration():
     return ResponseObject(data=DashboardConfig.toJson())
@@ -801,6 +938,10 @@ def API_updatePeerSettings(configName):
         wireguardConfig = WireguardConfigurations[configName]
         foundPeer, peer = wireguardConfig.searchPeer(id)
         if foundPeer:
+            try:
+                AllBackupScheduler.onPeerChange(configName, "peer_updated", name or id)
+            except Exception:
+                pass
             if wireguardConfig.Protocol == 'wg':
                 status, msg = peer.updatePeer(name, private_key, preshared_key, dns_addresses,
                                        allowed_ip, endpoint_allowed_ip, mtu, keepalive)
@@ -847,15 +988,19 @@ def API_deletePeers(configName: str) -> ResponseObject:
         if len(peers) == 0:
             return ResponseObject(False, "Please specify one or more peers", status_code=400)
         configuration = WireguardConfigurations.get(configName)
+        try:
+            AllBackupScheduler.onPeerChange(configName, "peer_deleted", f"{len(peers)} peers")
+        except Exception:
+            pass
         status, msg = configuration.deletePeers(peers, AllPeerJobs, AllPeerShareLinks)
-        
+
         # Delete Assignment
-        
+
         for p in peers:
             assignments = DashboardClients.DashboardClientsPeerAssignment.GetAssignedClients(configName, p)
             for c in assignments:
                 DashboardClients.DashboardClientsPeerAssignment.UnassignClients(c.AssignmentID)
-        
+
         # Re-sync gateway subnets (in case deleted peer was a gateway)
         _syncGatewaySubnetsToConfig(configuration)
         return ResponseObject(status, msg)
@@ -870,6 +1015,10 @@ def API_restrictPeers(configName: str) -> ResponseObject:
         if len(peers) == 0:
             return ResponseObject(False, "Please specify one or more peers")
         configuration = WireguardConfigurations.get(configName)
+        try:
+            AllBackupScheduler.onPeerChange(configName, "peer_restricted", f"{len(peers)} peers")
+        except Exception:
+            pass
         status, msg = configuration.restrictPeers(peers)
         return ResponseObject(status, msg)
     return ResponseObject(False, "Configuration does not exist", status_code=404)
@@ -937,6 +1086,10 @@ def API_allowAccessPeers(configName: str) -> ResponseObject:
         if len(peers) == 0:
             return ResponseObject(False, "Please specify one or more peers")
         configuration = WireguardConfigurations.get(configName)
+        try:
+            AllBackupScheduler.onPeerChange(configName, "peer_allowed", f"{len(peers)} peers")
+        except Exception:
+            pass
         status, msg = configuration.allowAccessPeers(peers)
         return ResponseObject(status, msg)
     return ResponseObject(False, "Configuration does not exist")
@@ -1497,6 +1650,10 @@ def API_addPeers(configName):
                         break
                 if len(keyPairs) == 0 or (bulkAdd and len(keyPairs) != bulkAddAmount):
                     return ResponseObject(False, "Generating key pairs by bulk failed")
+                try:
+                    AllBackupScheduler.onPeerChange(configName, "peer_added", f"{len(keyPairs)} peers")
+                except Exception:
+                    pass
                 status, addedPeers, message = config.addPeers(keyPairs)
                 return ResponseObject(status=status, message=message, data=addedPeers)
     
@@ -1543,6 +1700,10 @@ def API_addPeers(configName):
                 peerType = int(data.get('is_gateway', 0) or 0)
                 if peerType not in (0, 1, 2):
                     peerType = 0
+                try:
+                    AllBackupScheduler.onPeerChange(configName, "peer_added", name or public_key)
+                except Exception:
+                    pass
                 status, addedPeers, message = config.addPeers([
                     {
                         "name": name,
