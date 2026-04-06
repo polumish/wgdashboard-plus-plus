@@ -678,7 +678,7 @@ onMounted(() => {
                             </div>
                             <div class="border rounded-2 p-2 d-flex flex-column" :style="{ gap: '0.4rem' }">
                                 <div class="form-check mb-0">
-                                    <input class="form-check-input" type="checkbox" id="rc_wg" v-model="restoreComponents.wireguard_configurations">
+                                    <input class="form-check-input" type="checkbox" id="rc_wg" v-model="restoreComponents.configurations">
                                     <label class="form-check-label" for="rc_wg">
                                         <i class="bi bi-diagram-3 me-1 text-body-secondary"></i>
                                         <LocaleText t="WireGuard Configurations"></LocaleText>
