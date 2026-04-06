@@ -305,9 +305,13 @@ class BackupScheduler:
     # -----------------------------------------------------------------------
 
     def _get_config(self, section: str, key: str):
-        """Safe wrapper around dashboard_config.GetConfig()."""
+        """Safe wrapper around dashboard_config.GetConfig().
+        GetConfig returns a tuple (status, value) — we extract just the value."""
         try:
-            return self.config.GetConfig(section, key)
+            result = self.config.GetConfig(section, key)
+            if isinstance(result, tuple):
+                return result[1] if len(result) > 1 else result[0]
+            return result
         except Exception:  # noqa: BLE001
             return None
 
