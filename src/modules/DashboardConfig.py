@@ -93,6 +93,24 @@ class DashboardConfig:
             },
             "WireGuardConfiguration": {
                 "autostart": ""
+            },
+            "Backup": {
+                "backup_path": "",
+                "daily_enabled": "true",
+                "daily_time": "03:00",
+                "daily_keep": "7",
+                "weekly_enabled": "true",
+                "weekly_day": "sunday",
+                "weekly_keep": "4",
+                "monthly_enabled": "true",
+                "monthly_day": "1",
+                "monthly_keep": "3",
+                "max_storage_mb": "500",
+                "auto_backup_peer_changes": "true",
+                "auto_backup_config_changes": "true",
+                "auto_backup_debounce_seconds": "30",
+                "auto_backup_max_wait_seconds": "300",
+                "per_config_keep": "10"
             }
         }
 
