@@ -89,12 +89,14 @@ const formatSize = (bytes) => {
 const badgeClass = (type) => {
 	if (type === "auto") return "text-success-emphasis bg-success-subtle border-success-subtle"
 	if (type === "global") return "text-primary-emphasis bg-primary-subtle border-primary-subtle"
+	if (type === "restore_point") return "text-info-emphasis bg-info-subtle border-info-subtle"
 	return "text-secondary-emphasis bg-secondary-subtle border-secondary-subtle"
 }
 
 const typeIcon = (type) => {
 	if (type === "auto") return "bi-lightning-fill text-warning"
 	if (type === "global") return "bi-calendar-check text-primary"
+	if (type === "restore_point") return "bi-shield-fill-check text-info"
 	return "bi-archive text-secondary"
 }
 

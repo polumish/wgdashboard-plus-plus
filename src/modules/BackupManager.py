@@ -336,6 +336,15 @@ class BackupManager:
         if not self.verifyIntegrity(snap_dir):
             return {"status": False, "message": "Integrity check failed — checksums don't match"}
 
+        # Create restore point — backup current state before overwriting
+        try:
+            self.createGlobalSnapshot(
+                trigger="restore_point",
+                event_detail=f"pre-restore from {name}",
+            )
+        except Exception:
+            pass
+
         # Map component names to dashboard DB tables
         _COMPONENT_TABLE_MAP = {
             "webhooks": ["DashboardWebHooks", "DashboardWebHookSessions"],
@@ -451,6 +460,16 @@ class BackupManager:
 
         if not self.verifyIntegrity(backup_dir):
             return {"status": False, "message": "Integrity check failed — checksums don't match"}
+
+        # Create restore point — backup current state before overwriting
+        try:
+            self.createConfigBackup(
+                config_name=config_name,
+                trigger="restore_point",
+                event_detail=f"pre-restore from {name}",
+            )
+        except Exception:
+            pass
 
         with self._lock:
             # 1. Restore .conf file
@@ -687,6 +706,7 @@ class BackupManager:
         "scheduled_monthly": "monthly",
         "event": "auto",
         "manual": "manual",
+        "restore_point": "restore_point",
         "legacy_migration": "legacy",
     }
 
