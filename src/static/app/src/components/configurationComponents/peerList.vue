@@ -23,6 +23,7 @@ const EditConfigurationModal = defineAsyncComponent(() => import("@/components/c
 const SelectPeersModal = defineAsyncComponent(() => import("@/components/configurationComponents/selectPeers.vue"))
 const PeerAddModal = defineAsyncComponent(() => import("@/components/configurationComponents/peerAddModal.vue"))
 const OPNsenseGatewayModal = defineAsyncComponent(() => import("@/components/configurationComponents/opnsenseGatewayModal.vue"))
+const ConfigurationBackups = defineAsyncComponent(() => import("@/components/configurationComponents/configurationBackups.vue"))
 
 const dashboardStore = DashboardConfigurationStore()
 const wireguardConfigurationStore = WireguardConfigurationsStore()
@@ -72,6 +73,9 @@ const configurationModals = ref({
 		modalOpen: false
 	},
 	backupRestore: {
+		modalOpen: false
+	},
+	configurationBackups: {
 		modalOpen: false
 	},
 	deleteConfiguration: {
@@ -517,6 +521,7 @@ watch(() => route.query.id, (newValue) => {
 			@editConfiguration="configurationModals.editConfiguration.modalOpen = true"
 			@selectPeers="configurationModals.selectPeers.modalOpen = true"
 			@backupRestore="configurationModals.backupRestore.modalOpen = true"
+			@backups="configurationModals.configurationBackups.modalOpen = true"
 			@deleteConfiguration="configurationModals.deleteConfiguration.modalOpen = true"
 			:configuration="configurationInfo">
 		</PeerSearch>
@@ -774,6 +779,12 @@ watch(() => route.query.id, (newValue) => {
 			:configurationPeers="configurationPeers"
 			@close="configurationModals.selectPeers.modalOpen = false"
 		></SelectPeersModal>
+		<ConfigurationBackups
+			key="ConfigurationBackups"
+			v-if="configurationModals.configurationBackups.modalOpen"
+			@close="configurationModals.configurationBackups.modalOpen = false"
+			@refreshPeersList="fetchPeerList()"
+		></ConfigurationBackups>
 		<PeerDetailsModal
 			key="PeerDetailsModal"
 			v-if="configurationModals.peerDetails.modalOpen"
