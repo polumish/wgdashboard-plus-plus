@@ -810,7 +810,7 @@ def API_updatePeerSettings(configName):
             wireguardConfig.getPeers()
             # Re-sync gateway subnets if this peer is a gateway
             updatedPeer = wireguardConfig.searchPeer(id)
-            if updatedPeer[0] and getattr(updatedPeer[1], 'is_gateway', False):
+            if updatedPeer[0] and getattr(updatedPeer[1], 'is_gateway', 0) in (1, 2):
                 _syncGatewaySubnetsToConfig(wireguardConfig)
             DashboardWebHooks.RunWebHook('peer_updated', {
                 "configuration": wireguardConfig.Name,
@@ -1094,7 +1094,7 @@ def _syncGatewaySubnetsToConfig(wc):
     import ipaddress as _ipaddress
     lanSubnets = set()
     for p in wc.Peers:
-        if not getattr(p, 'is_gateway', False):
+        if not getattr(p, 'is_gateway', 0):
             continue
         for part in (p.allowed_ip or '').split(','):
             part = part.strip()

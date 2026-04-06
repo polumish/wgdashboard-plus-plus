@@ -37,9 +37,9 @@ class Peer:
         self.remote_endpoint = tableData["remote_endpoint"]
         self.preshared_key = tableData["preshared_key"]
         try:
-            self.is_gateway = bool(tableData["is_gateway"] or 0)
-        except (KeyError, LookupError):
-            self.is_gateway = False
+            self.is_gateway = int(tableData["is_gateway"] or 0)
+        except (KeyError, LookupError, TypeError, ValueError):
+            self.is_gateway = 0
         try:
             self.opnsense_listen_port = int(tableData["opnsense_listen_port"] or 0)
         except (KeyError, LookupError, TypeError, ValueError):
