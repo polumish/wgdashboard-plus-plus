@@ -52,6 +52,9 @@ CONFIG_TABLE_SUFFIXES = [
     "_history_endpoint",       # <config_name>_history_endpoint
 ]
 
+# Suffixes to EXCLUDE from per-config backups (large, append-only data)
+CONFIG_TABLE_SUFFIXES_SKIP_PERCONFIG = {"_transfer", "_history_endpoint"}
+
 
 class BackupManager:
     """Handles creation, listing, deletion, download and integrity verification
@@ -225,12 +228,13 @@ class BackupManager:
                 db_dir = os.path.join(backup_dir)
                 all_data = self._export_database()
 
-                # Tables belonging to this config
+                # Tables belonging to this config (skip transfer/history — too large, not needed for restore)
                 config_tables = {
                     tbl: rows
                     for tbl, rows in all_data.items()
-                    if tbl == config_name
-                    or any(tbl == f"{config_name}{suf}" for suf in CONFIG_TABLE_SUFFIXES[1:])
+                    if (tbl == config_name
+                        or any(tbl == f"{config_name}{suf}" for suf in CONFIG_TABLE_SUFFIXES[1:]))
+                    and not any(tbl.endswith(skip) for skip in CONFIG_TABLE_SUFFIXES_SKIP_PERCONFIG)
                 }
                 # Also include ConfigurationsInfo row for this config
                 if "ConfigurationsInfo" in all_data:
