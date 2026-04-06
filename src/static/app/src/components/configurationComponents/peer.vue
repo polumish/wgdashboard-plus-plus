@@ -81,7 +81,7 @@ export default {
 		</div>
 		<div class="card-body pt-1" style="font-size: 0.9rem">
 			<h6>
-				<span v-if="Peer.is_gateway" class="badge bg-info-subtle text-info-emphasis rounded-3 me-1" title="Gateway">
+				<span v-if="Peer.is_gateway" class="badge bg-danger-subtle text-danger-emphasis rounded-3 me-1" title="Gateway">
 					<i class="bi bi-router"></i> GW
 				</span>
 				{{Peer.name ? Peer.name : GetLocale('Untitled Peer')}}
@@ -155,7 +155,7 @@ export default {
 }
 
 .gateway-card{
-	border-left: 3px solid var(--bs-info) !important;
-	background-color: rgba(13, 202, 240, 0.03);
+	border-left: 3px solid var(--bs-danger) !important;
+	background-color: rgba(220, 53, 69, 0.03);
 }
 </style>

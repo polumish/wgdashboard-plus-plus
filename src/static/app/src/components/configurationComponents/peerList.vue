@@ -241,7 +241,10 @@ const searchPeers = computed(() => {
 	}
 
 
-	return re
+	// Gateways always on top
+	const gateways = re.filter(p => p.is_gateway)
+	const regular = re.filter(p => !p.is_gateway)
+	return [...gateways, ...regular]
 })
 
 const _handshakeToTimestamp = (hs) => {
@@ -276,7 +279,7 @@ const tableSortedPeers = computed(() => {
 		if (va < vb) return asc ? -1 : 1
 		if (va > vb) return asc ? 1 : -1
 		return 0
-	})
+	}).sort((a, b) => (b.is_gateway ? 1 : 0) - (a.is_gateway ? 1 : 0))
 })
 
 const columnsLeftPeers = computed(() => {
@@ -557,7 +560,7 @@ watch(() => route.query.id, (newValue) => {
 						</td>
 						<td>
 							<strong class="d-block" style="font-size: 0.85rem">
-								<span v-if="peer.is_gateway" class="badge bg-info-subtle text-info-emphasis rounded-3 me-1" title="Gateway" style="font-size: 0.65rem;">
+								<span v-if="peer.is_gateway" class="badge bg-danger-subtle text-danger-emphasis rounded-3 me-1" title="Gateway" style="font-size: 0.65rem;">
 									<i class="bi bi-router"></i> GW
 								</span>
 								{{ peer.name || 'Untitled' }}
@@ -628,7 +631,7 @@ watch(() => route.query.id, (newValue) => {
 							</td>
 							<td>
 								<strong style="font-size: 0.82rem;">
-									<span v-if="peer.is_gateway" class="badge bg-info-subtle text-info-emphasis rounded-3 me-1" title="Gateway" style="font-size: 0.62rem;">
+									<span v-if="peer.is_gateway" class="badge bg-danger-subtle text-danger-emphasis rounded-3 me-1" title="Gateway" style="font-size: 0.62rem;">
 										<i class="bi bi-router"></i> GW
 									</span>
 									{{ peer.name || 'Untitled' }}
@@ -784,10 +787,10 @@ th, td{
 }
 
 tr.gateway-row > td:first-child {
-	box-shadow: inset 3px 0 0 0 var(--bs-info);
+	box-shadow: inset 3px 0 0 0 var(--bs-danger);
 }
 tr.gateway-row {
-	background-color: rgba(13, 202, 240, 0.04) !important;
+	background-color: rgba(220, 53, 69, 0.04) !important;
 }
 
 @media screen and (max-width: 576px) {
