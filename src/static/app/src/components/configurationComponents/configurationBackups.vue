@@ -104,11 +104,11 @@ onMounted(() => {
 </script>
 
 <template>
-<div class="peerSettingContainer w-100 h-100 position-absolute top-0 start-0 overflow-y-scroll"
+<div class="peerSettingContainer backups-overlay w-100 h-100 position-absolute top-0 start-0 overflow-y-scroll"
      @click.self="emit('close')">
-	<div class="d-flex h-100 w-100 justify-content-center">
-		<div class="backup-panel my-4 mx-3">
-			<div class="card rounded-3 shadow">
+	<div class="container d-flex h-100 w-100">
+		<div class="m-auto modal-dialog-centered backup-panel">
+			<div class="card rounded-3 shadow-lg">
 				<!-- Header -->
 				<div class="card-header bg-transparent border-bottom d-flex align-items-center"
 				     style="padding: var(--density-card-py) var(--density-card-px)">
@@ -259,10 +259,25 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.backups-overlay {
+	background-color: rgba(0, 0, 0, 0.85) !important;
+	backdrop-filter: blur(8px) !important;
+	-webkit-backdrop-filter: blur(8px) !important;
+}
+
+[data-bs-theme="light"] .backups-overlay {
+	background-color: rgba(240, 242, 245, 0.95) !important;
+}
+
 .backup-panel {
-	width: 100%;
-	max-width: 700px;
-	align-self: flex-start;
+	width: 700px;
+}
+
+@media screen and (max-width: 750px) {
+	.backup-panel {
+		width: 100%;
+		margin: 0.5rem;
+	}
 }
 
 .backup-row {
