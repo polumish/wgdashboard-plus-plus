@@ -12,8 +12,8 @@ const emit = defineEmits(["close", "refreshPeersList"])
 const backups = ref([])
 const loading = ref(true)
 const creating = ref(false)
-const confirmRestore = ref(null)   // holds backup name being confirmed
-const confirmDelete = ref(null)    // holds backup name being confirmed
+const confirmRestore = ref(null)
+const confirmDelete = ref(null)
 
 const configName = route.params.id
 
@@ -104,161 +104,154 @@ onMounted(() => {
 </script>
 
 <template>
-<div class="peerSettingContainer w-100 h-100 position-absolute top-0 start-0 overflow-y-scroll">
-	<div class="d-flex h-100 w-100">
-		<div class="modal-dialog-centered dashboardModal w-100 overflow-x-hidden flex-column gap-3 mx-3" style="max-width: 700px;">
-			<div class="my-5 d-flex gap-3 flex-column position-relative">
-
+<div class="peerSettingContainer w-100 h-100 position-absolute top-0 start-0 overflow-y-scroll"
+     @click.self="emit('close')">
+	<div class="d-flex h-100 w-100 justify-content-center">
+		<div class="backup-panel my-4 mx-3">
+			<div class="card rounded-3 shadow">
 				<!-- Header -->
-				<div class="card rounded-3">
-					<div class="card-body d-flex align-items-center gap-2" style="padding: var(--density-card-py) var(--density-card-px)">
-						<div>
-							<h4 class="mb-0 d-flex align-items-center gap-2">
-								<i class="bi bi-archive"></i>
-								<LocaleText t="Backups"></LocaleText>
-								<span class="text-muted">&mdash;</span>
-								<samp class="fs-5">{{ configName }}</samp>
-							</h4>
-						</div>
-						<div class="ms-auto d-flex gap-2 align-items-center">
-							<button
-								@click="createBackup()"
-								:disabled="creating"
-								class="btn btn-sm bg-success-subtle text-success-emphasis border-success-subtle rounded-3">
-								<span v-if="creating" class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
-								<i v-else class="bi bi-plus-circle-fill me-1"></i>
-								<LocaleText t="Create"></LocaleText>
-							</button>
-							<button type="button" class="btn-close" @click="emit('close')"></button>
-						</div>
+				<div class="card-header bg-transparent border-bottom d-flex align-items-center"
+				     style="padding: var(--density-card-py) var(--density-card-px)">
+					<i class="bi bi-archive me-2" style="font-size: 1.1rem"></i>
+					<h5 class="mb-0 d-flex align-items-center gap-2">
+						<LocaleText t="Backups"></LocaleText>
+						<span class="text-muted fw-normal">&mdash;</span>
+						<samp>{{ configName }}</samp>
+					</h5>
+					<div class="ms-auto d-flex gap-2 align-items-center">
+						<button
+							@click="createBackup()"
+							:disabled="creating"
+							class="btn btn-sm bg-success-subtle text-success-emphasis border-success-subtle rounded-3">
+							<span v-if="creating" class="spinner-border spinner-border-sm me-1"></span>
+							<i v-else class="bi bi-plus-circle-fill me-1"></i>
+							<LocaleText t="Create"></LocaleText>
+						</button>
+						<button type="button" class="btn-close" @click="emit('close')"></button>
 					</div>
 				</div>
 
 				<!-- Info bar -->
-				<div class="card rounded-3 border-success-subtle bg-success-subtle">
-					<div class="card-body py-2 px-3">
-						<small class="text-success-emphasis d-flex align-items-center gap-2">
-							<i class="bi bi-info-circle-fill"></i>
-							<LocaleText t="Backups are created automatically on peer and interface changes (debounced)."></LocaleText>
-						</small>
-					</div>
+				<div class="border-bottom px-3 py-2 d-flex align-items-center gap-2"
+				     style="background: var(--bs-success-bg-subtle); font-size: var(--density-font-sm)">
+					<i class="bi bi-info-circle-fill text-success"></i>
+					<span class="text-success-emphasis">
+						<LocaleText t="Backups are created automatically on peer and interface changes (debounced)."></LocaleText>
+					</span>
 				</div>
 
-				<!-- Backup List -->
-				<div class="position-relative d-flex flex-column gap-2">
-					<TransitionGroup name="list1">
-						<div key="spinner" v-if="loading && backups.length === 0" class="text-center py-5">
-							<div class="spinner-border text-secondary" role="status"></div>
-						</div>
+				<!-- Content -->
+				<div class="card-body p-0">
+					<!-- Loading -->
+					<div v-if="loading && backups.length === 0" class="text-center py-5">
+						<div class="spinner-border text-secondary" role="status"></div>
+					</div>
 
-						<div key="empty" v-else-if="!loading && backups.length === 0"
-						     class="card rounded-3">
-							<div class="card-body text-center text-muted py-4">
-								<i class="bi bi-archive me-2"></i>
-								<LocaleText t="No backups yet. Click Create to make one."></LocaleText>
-							</div>
-						</div>
+					<!-- Empty -->
+					<div v-else-if="!loading && backups.length === 0" class="text-center text-muted py-5">
+						<i class="bi bi-archive" style="font-size: 2rem; opacity: 0.3"></i>
+						<p class="mt-2 mb-0">
+							<LocaleText t="No backups yet. Click Create to make one."></LocaleText>
+						</p>
+					</div>
 
-						<div v-for="b in backups" :key="b.name" class="card rounded-3 position-relative">
-							<!-- Restore confirmation overlay -->
-							<Transition name="zoomReversed">
-								<div v-if="confirmRestore === b.name"
-								     class="position-absolute w-100 h-100 start-0 top-0 rounded-3 d-flex p-2"
-								     style="background: rgba(0,0,0,0.55); backdrop-filter: blur(2px); z-index: 10;">
-									<div class="m-auto text-center">
-										<p class="text-white fw-semibold mb-3">
-											<LocaleText t="Restore this backup? Current config will be overwritten."></LocaleText>
-										</p>
-										<div class="d-flex gap-2 justify-content-center">
-											<button class="btn btn-success rounded-3" @click="restoreBackup(b.name)">
-												<LocaleText t="Yes, restore"></LocaleText>
-											</button>
-											<button class="btn bg-secondary-subtle text-secondary-emphasis border-secondary-subtle rounded-3"
-											        @click="confirmRestore = null">
-												<LocaleText t="Cancel"></LocaleText>
-											</button>
+					<!-- Backup list -->
+					<div v-else>
+						<TransitionGroup name="list1" tag="div">
+							<div v-for="(b, idx) in backups" :key="b.name"
+							     class="backup-row position-relative"
+							     :class="{ 'border-bottom': idx < backups.length - 1 }">
+
+								<!-- Restore confirmation -->
+								<Transition name="zoomReversed">
+									<div v-if="confirmRestore === b.name"
+									     class="confirm-overlay rounded-0 d-flex">
+										<div class="m-auto text-center">
+											<p class="text-white fw-semibold mb-3">
+												<LocaleText t="Restore this backup? Current config will be overwritten."></LocaleText>
+											</p>
+											<div class="d-flex gap-2 justify-content-center">
+												<button class="btn btn-success rounded-3" @click="restoreBackup(b.name)">
+													<LocaleText t="Yes, restore"></LocaleText>
+												</button>
+												<button class="btn bg-secondary-subtle text-secondary-emphasis border-secondary-subtle rounded-3"
+												        @click="confirmRestore = null">
+													<LocaleText t="Cancel"></LocaleText>
+												</button>
+											</div>
 										</div>
 									</div>
-								</div>
-							</Transition>
+								</Transition>
 
-							<!-- Delete confirmation overlay -->
-							<Transition name="zoomReversed">
-								<div v-if="confirmDelete === b.name"
-								     class="position-absolute w-100 h-100 start-0 top-0 rounded-3 d-flex p-2"
-								     style="background: rgba(0,0,0,0.55); backdrop-filter: blur(2px); z-index: 10;">
-									<div class="m-auto text-center">
-										<p class="text-white fw-semibold mb-3">
-											<LocaleText t="Delete this backup permanently?"></LocaleText>
-										</p>
-										<div class="d-flex gap-2 justify-content-center">
-											<button class="btn btn-danger rounded-3" @click="deleteBackup(b.name)">
-												<LocaleText t="Yes, delete"></LocaleText>
-											</button>
-											<button class="btn bg-secondary-subtle text-secondary-emphasis border-secondary-subtle rounded-3"
-											        @click="confirmDelete = null">
-												<LocaleText t="Cancel"></LocaleText>
-											</button>
+								<!-- Delete confirmation -->
+								<Transition name="zoomReversed">
+									<div v-if="confirmDelete === b.name"
+									     class="confirm-overlay rounded-0 d-flex">
+										<div class="m-auto text-center">
+											<p class="text-white fw-semibold mb-3">
+												<LocaleText t="Delete this backup permanently?"></LocaleText>
+											</p>
+											<div class="d-flex gap-2 justify-content-center">
+												<button class="btn btn-danger rounded-3" @click="deleteBackup(b.name)">
+													<LocaleText t="Yes, delete"></LocaleText>
+												</button>
+												<button class="btn bg-secondary-subtle text-secondary-emphasis border-secondary-subtle rounded-3"
+												        @click="confirmDelete = null">
+													<LocaleText t="Cancel"></LocaleText>
+												</button>
+											</div>
 										</div>
 									</div>
-								</div>
-							</Transition>
+								</Transition>
 
-							<div class="card-body px-3 py-3">
-								<div class="d-flex align-items-start gap-3 flex-wrap">
-									<!-- Icon -->
-									<i class="bi fs-4 mt-1" :class="typeIcon(b.type)"></i>
+								<div class="d-flex align-items-center gap-3 flex-wrap"
+								     style="padding: var(--density-card-py) var(--density-card-px)">
+									<i class="bi" :class="typeIcon(b.type)" style="font-size: 1.1rem"></i>
 
-									<!-- Details -->
 									<div class="flex-grow-1 min-w-0">
-										<div class="d-flex align-items-center gap-2 flex-wrap mb-1">
-											<samp class="fw-semibold" style="word-break: break-all;">{{ b.name }}</samp>
+										<div class="d-flex align-items-center gap-2 flex-wrap">
+											<samp class="fw-semibold" style="font-size: var(--density-font); word-break: break-all;">{{ b.name }}</samp>
 											<span class="badge rounded-pill border"
 											      :class="badgeClass(b.type)"
 											      style="font-size: var(--density-font-sm)">
 												{{ b.type || 'manual' }}
 											</span>
 										</div>
-										<div v-if="b.event" class="text-muted mb-1">
-											<small><i class="bi bi-tag me-1"></i>{{ b.event }}</small>
-										</div>
-										<div class="d-flex gap-3 flex-wrap">
-											<small class="text-muted" v-if="b.date">
+										<div class="d-flex gap-3 flex-wrap mt-1" style="font-size: var(--density-font-sm)">
+											<span v-if="b.event" class="text-muted">
+												<i class="bi bi-tag me-1"></i>{{ b.event }}
+											</span>
+											<span class="text-muted" v-if="b.date">
 												<i class="bi bi-clock me-1"></i>{{ formatDate(b.date) }}
-											</small>
-											<small class="text-muted" v-if="b.size != null">
+											</span>
+											<span class="text-muted" v-if="b.size != null">
 												<i class="bi bi-hdd me-1"></i>{{ formatSize(b.size) }}
-											</small>
+											</span>
 										</div>
 									</div>
 
-									<!-- Action buttons -->
 									<div class="d-flex gap-1 align-items-center flex-shrink-0">
-										<button
-											@click="downloadBackup(b.name)"
-											class="btn btn-sm bg-primary-subtle text-primary-emphasis border-primary-subtle rounded-3"
-											title="Download">
+										<button @click="downloadBackup(b.name)"
+										        class="btn btn-sm bg-primary-subtle text-primary-emphasis border-primary-subtle rounded-3"
+										        title="Download">
 											<i class="bi bi-download"></i>
 										</button>
-										<button
-											@click="confirmRestore = b.name"
-											class="btn btn-sm bg-warning-subtle text-warning-emphasis border-warning-subtle rounded-3"
-											title="Restore">
+										<button @click="confirmRestore = b.name"
+										        class="btn btn-sm bg-warning-subtle text-warning-emphasis border-warning-subtle rounded-3"
+										        title="Restore">
 											<i class="bi bi-clock-history"></i>
 										</button>
-										<button
-											@click="confirmDelete = b.name"
-											class="btn btn-sm bg-danger-subtle text-danger-emphasis border-danger-subtle rounded-3"
-											title="Delete">
+										<button @click="confirmDelete = b.name"
+										        class="btn btn-sm bg-danger-subtle text-danger-emphasis border-danger-subtle rounded-3"
+										        title="Delete">
 											<i class="bi bi-trash-fill"></i>
 										</button>
 									</div>
 								</div>
 							</div>
-						</div>
-					</TransitionGroup>
+						</TransitionGroup>
+					</div>
 				</div>
-
 			</div>
 		</div>
 	</div>
@@ -266,14 +259,33 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.dashboardModal {
+.backup-panel {
 	width: 100%;
+	max-width: 700px;
+	align-self: flex-start;
 }
 
-@media screen and (min-width: 700px) {
-	.dashboardModal {
-		width: 700px;
-	}
+.backup-row {
+	transition: background-color 0.15s;
+}
+
+.backup-row:hover {
+	background-color: rgba(255, 255, 255, 0.03);
+}
+
+[data-bs-theme="light"] .backup-row:hover {
+	background-color: rgba(0, 0, 0, 0.02);
+}
+
+.confirm-overlay {
+	position: absolute;
+	width: 100%;
+	height: 100%;
+	top: 0;
+	left: 0;
+	background: rgba(0, 0, 0, 0.6);
+	backdrop-filter: blur(2px);
+	z-index: 10;
 }
 
 .list1-move,
