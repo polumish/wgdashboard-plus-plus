@@ -1096,6 +1096,10 @@ def _syncGatewaySubnetsToConfig(wc):
                 lanSubnets.add(part)
             except (ValueError, TypeError):
                 lanSubnets.add(part)
+    # Always include the tunnel subnet so peers can see each other (mesh)
+    tunnelSubnet = _configSubnetForPolicy(wc)
+    if tunnelSubnet:
+        lanSubnets.add(tunnelSubnet)
     lanStr = ', '.join(sorted(lanSubnets)) if lanSubnets else ''
     # Update EndpointAllowedIPs
     wc.configurationInfo.OverridePeerSettings.EndpointAllowedIPs = lanStr
@@ -1367,7 +1371,11 @@ def API_addPeers(configName):
             allowed_ips: list[str] = data.get('allowed_ips', [])
             allowed_ips_validation: bool = data.get('allowed_ips_validation', True)
             
-            endpoint_allowed_ip: str = data.get('endpoint_allowed_ip', DashboardConfig.GetConfig("Peers", "peer_endpoint_allowed_ip")[1])
+            # Default endpoint_allowed_ip = config's tunnel subnet (mesh), not 0.0.0.0/0
+            _configDefaultEAIP = _configSubnetForPolicy(WireguardConfigurations[configName]) or DashboardConfig.GetConfig("Peers", "peer_endpoint_allowed_ip")[1]
+            endpoint_allowed_ip: str = data.get('endpoint_allowed_ip', _configDefaultEAIP)
+            if endpoint_allowed_ip == '0.0.0.0/0':
+                endpoint_allowed_ip = _configDefaultEAIP
             dns_addresses: str = data.get('DNS', DashboardConfig.GetConfig("Peers", "peer_global_DNS")[1])
             
             

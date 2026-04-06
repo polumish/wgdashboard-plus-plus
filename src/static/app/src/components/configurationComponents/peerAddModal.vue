@@ -18,6 +18,9 @@ import {WireguardConfigurationsStore} from "@/stores/WireguardConfigurationsStor
 
 const dashboardStore = DashboardConfigurationStore()
 const wireguardStore = WireguardConfigurationsStore()
+const _currentConfig = wireguardStore.Configurations.find(x => x.Name === useRoute().params.id)
+const _configAddress = _currentConfig ? (_currentConfig.Address || '').split(',')[0].trim() : ''
+const _defaultEAIP = _configAddress || dashboardStore.Configuration.Peers.peer_endpoint_allowed_ip
 const peerData = ref({
 	bulkAdd: false,
 	bulkAddAmount: 0,
@@ -26,7 +29,7 @@ const peerData = ref({
 	private_key: "",
 	public_key: "",
 	DNS: dashboardStore.Configuration.Peers.peer_global_dns,
-	endpoint_allowed_ip: dashboardStore.Configuration.Peers.peer_endpoint_allowed_ip,
+	endpoint_allowed_ip: _defaultEAIP,
 	keepalive: parseInt(dashboardStore.Configuration.Peers.peer_keep_alive),
 	mtu: parseInt(dashboardStore.Configuration.Peers.peer_mtu),
 	preshared_key: "",
