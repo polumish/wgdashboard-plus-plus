@@ -10,6 +10,7 @@ const configurationName = route.params.id;
 const input = ref("")
 const router = useRouter()
 const store = DashboardConfigurationStore()
+const wireguardStore = WireguardConfigurationsStore()
 const deleting = ref(false)
 
 const deleteConfiguration = () => {
@@ -17,8 +18,10 @@ const deleteConfiguration = () => {
 	deleting.value = true;
 	fetchPost("/api/deleteWireguardConfiguration", {
 		ConfigurationName: configurationName
-	}, (res) => {
+	}, async (res) => {
 		if (res.status){
+			// Refresh config list from server so sidebar updates
+			await wireguardStore.getConfigurations()
 			router.push('/')
 			store.newMessage("Server", "Configuration deleted", "success")
 		}else{
