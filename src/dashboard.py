@@ -569,12 +569,11 @@ def API_updateWireguardConfiguration():
     if name not in WireguardConfigurations.keys():
         return ResponseObject(False, "Configuration does not exist", status_code=404)
     
+    try:
+        AllBackupScheduler.onConfigChange(data.get("Name", ""), "config_updated")
+    except Exception:
+        pass
     status, msg = WireguardConfigurations[name].updateConfigurationSettings(data)
-    if status:
-        try:
-            AllBackupScheduler.onConfigChange(data.get("Name", ""), "config_updated")
-        except Exception:
-            pass
     return ResponseObject(status, message=msg, data=WireguardConfigurations[name])
 
 @app.post(f'{APP_PREFIX}/api/updateWireguardConfigurationInfo')
@@ -977,21 +976,21 @@ def API_deletePeers(configName: str) -> ResponseObject:
         if len(peers) == 0:
             return ResponseObject(False, "Please specify one or more peers", status_code=400)
         configuration = WireguardConfigurations.get(configName)
-        status, msg = configuration.deletePeers(peers, AllPeerJobs, AllPeerShareLinks)
-        
-        # Delete Assignment
-        
-        for p in peers:
-            assignments = DashboardClients.DashboardClientsPeerAssignment.GetAssignedClients(configName, p)
-            for c in assignments:
-                DashboardClients.DashboardClientsPeerAssignment.UnassignClients(c.AssignmentID)
-        
-        # Re-sync gateway subnets (in case deleted peer was a gateway)
-        _syncGatewaySubnetsToConfig(configuration)
         try:
             AllBackupScheduler.onPeerChange(configName, "peer_deleted", f"{len(peers)} peers")
         except Exception:
             pass
+        status, msg = configuration.deletePeers(peers, AllPeerJobs, AllPeerShareLinks)
+
+        # Delete Assignment
+
+        for p in peers:
+            assignments = DashboardClients.DashboardClientsPeerAssignment.GetAssignedClients(configName, p)
+            for c in assignments:
+                DashboardClients.DashboardClientsPeerAssignment.UnassignClients(c.AssignmentID)
+
+        # Re-sync gateway subnets (in case deleted peer was a gateway)
+        _syncGatewaySubnetsToConfig(configuration)
         return ResponseObject(status, msg)
 
     return ResponseObject(False, "Configuration does not exist", status_code=404)
@@ -1004,11 +1003,11 @@ def API_restrictPeers(configName: str) -> ResponseObject:
         if len(peers) == 0:
             return ResponseObject(False, "Please specify one or more peers")
         configuration = WireguardConfigurations.get(configName)
-        status, msg = configuration.restrictPeers(peers)
         try:
             AllBackupScheduler.onPeerChange(configName, "peer_restricted", f"{len(peers)} peers")
         except Exception:
             pass
+        status, msg = configuration.restrictPeers(peers)
         return ResponseObject(status, msg)
     return ResponseObject(False, "Configuration does not exist", status_code=404)
 
@@ -1075,11 +1074,11 @@ def API_allowAccessPeers(configName: str) -> ResponseObject:
         if len(peers) == 0:
             return ResponseObject(False, "Please specify one or more peers")
         configuration = WireguardConfigurations.get(configName)
-        status, msg = configuration.allowAccessPeers(peers)
         try:
             AllBackupScheduler.onPeerChange(configName, "peer_allowed", f"{len(peers)} peers")
         except Exception:
             pass
+        status, msg = configuration.allowAccessPeers(peers)
         return ResponseObject(status, msg)
     return ResponseObject(False, "Configuration does not exist")
 
@@ -1639,12 +1638,11 @@ def API_addPeers(configName):
                         break
                 if len(keyPairs) == 0 or (bulkAdd and len(keyPairs) != bulkAddAmount):
                     return ResponseObject(False, "Generating key pairs by bulk failed")
+                try:
+                    AllBackupScheduler.onPeerChange(configName, "peer_added", f"{len(keyPairs)} peers")
+                except Exception:
+                    pass
                 status, addedPeers, message = config.addPeers(keyPairs)
-                if status:
-                    try:
-                        AllBackupScheduler.onPeerChange(configName, "peer_added", f"{len(keyPairs)} peers")
-                    except Exception:
-                        pass
                 return ResponseObject(status=status, message=message, data=addedPeers)
     
             else:
@@ -1708,11 +1706,6 @@ def API_addPeers(configName):
                 # Sync gateway/server subnets → updates override + routing
                 if status and peerType in (1, 2):
                     _syncGatewaySubnetsToConfig(config)
-                if status:
-                    try:
-                        AllBackupScheduler.onPeerChange(configName, "peer_added", name or public_key)
-                    except Exception:
-                        pass
                 return ResponseObject(status=status, message=message, data=addedPeers)
         except Exception as e:
             app.logger.error("Add peers failed", e)

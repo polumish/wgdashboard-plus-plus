@@ -41,6 +41,9 @@ class BackupScheduler:
         # type ("daily" | "weekly" | "monthly") -> datetime of last scheduled run
         self._last_scheduled: dict[str, datetime] = {}
 
+        # config_name -> timestamp of last pre-change backup (cooldown)
+        self._last_pre_change: dict[str, float] = {}
+
     # -----------------------------------------------------------------------
     # Lifecycle
     # -----------------------------------------------------------------------
@@ -210,31 +213,55 @@ class BackupScheduler:
     # -----------------------------------------------------------------------
 
     def onPeerChange(self, config_name: str, action: str, peer_name: str) -> None:
-        """Called when a peer is added, removed or modified.
+        """Called BEFORE a peer is added, removed or modified.
 
-        Parameters
-        ----------
-        config_name: WireGuard configuration name (e.g. "wg0")
-        action:      short verb, e.g. "added", "removed", "updated"
-        peer_name:   peer public key or display name
+        Creates a pre-change backup synchronously so the backup captures
+        the state BEFORE the change (allowing undo). Uses a cooldown to
+        avoid creating multiple backups for rapid bulk operations.
         """
         enabled = self._get_config("Backup", "auto_backup_peer_changes")
         if not self._is_truthy(enabled):
             return
-        self._debounce_backup(config_name, "event", f"{action}: {peer_name}")
+        self._create_pre_change_backup(config_name, f"{action}: {peer_name}")
 
     def onConfigChange(self, config_name: str, change_detail: str) -> None:
-        """Called when a configuration's settings change.
+        """Called BEFORE a configuration's settings change.
 
-        Parameters
-        ----------
-        config_name:   WireGuard configuration name
-        change_detail: human-readable description of what changed
+        Creates a pre-change backup synchronously.
         """
         enabled = self._get_config("Backup", "auto_backup_config_changes")
         if not self._is_truthy(enabled):
             return
-        self._debounce_backup(config_name, "event", change_detail)
+        self._create_pre_change_backup(config_name, change_detail)
+
+    def _create_pre_change_backup(self, config_name: str, event_detail: str) -> None:
+        """Create a backup synchronously with cooldown to avoid duplicates.
+
+        If a backup for this config was already created within the last
+        `_debounce_seconds`, skip to avoid noise from bulk operations.
+        """
+        import time
+        now = time.time()
+        with self._lock:
+            last = self._last_pre_change.get(config_name, 0)
+            if now - last < self._debounce_seconds:
+                return  # cooldown — skip
+            self._last_pre_change[config_name] = now
+
+        try:
+            self.bm.createConfigBackup(
+                config_name=config_name,
+                trigger="event",
+                event_detail=event_detail,
+            )
+            per_config_keep = self._get_config("Backup", "per_config_keep")
+            try:
+                keep = int(per_config_keep)
+            except (TypeError, ValueError):
+                keep = 10
+            self.bm.enforcePerConfigRotation(config_name, keep=keep)
+        except Exception as e:
+            logging.error("Pre-change backup error for %s: %s", config_name, e)
 
     # -----------------------------------------------------------------------
     # Debounce machinery
