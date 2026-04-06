@@ -1088,33 +1088,45 @@ PersistentKeepalive = {keepalive}
 
 
 def _syncGatewaySubnetsToConfig(wc):
-    """After gateway peer changes, recalculate EndpointAllowedIPs and
-    RoutedLANSubnets from all gateway peers in this config, then apply
-    policy routing live."""
+    """After gateway/server peer changes, recalculate EndpointAllowedIPs and
+    RoutedLANSubnets from all gateway+server peers in this config, then apply
+    policy routing live.
+    - Gateway (is_gateway=1): contributes LAN subnets from allowed_ip
+    - Server (is_gateway=2): contributes its own WG IP as /32
+    """
     import ipaddress as _ipaddress
     lanSubnets = set()
+    configNet = None
+    for addr in (a.strip() for a in (wc.Address or '').split(',')):
+        try:
+            configNet = _ipaddress.ip_interface(addr).network
+            break
+        except ValueError:
+            pass
     for p in wc.Peers:
-        if not getattr(p, 'is_gateway', 0):
-            continue
-        for part in (p.allowed_ip or '').split(','):
-            part = part.strip()
-            if not part:
-                continue
-            try:
-                net = _ipaddress.ip_network(part, strict=False)
-                # Skip the peer's own WG /32 address (it's in the config's tunnel subnet)
-                configNet = None
-                for addr in (a.strip() for a in (wc.Address or '').split(',')):
-                    try:
-                        configNet = _ipaddress.ip_interface(addr).network
-                        break
-                    except ValueError:
-                        pass
-                if configNet and net.subnet_of(configNet):
-                    continue  # This is the peer's WG IP, not a LAN
-                lanSubnets.add(part)
-            except (ValueError, TypeError):
-                lanSubnets.add(part)
+        peerType = getattr(p, 'is_gateway', 0)
+        if peerType == 1:
+            # Gateway: collect LAN subnets (skip peer's own WG IP)
+            for part in (p.allowed_ip or '').split(','):
+                part = part.strip()
+                if not part:
+                    continue
+                try:
+                    net = _ipaddress.ip_network(part, strict=False)
+                    if configNet and net.subnet_of(configNet):
+                        continue
+                    lanSubnets.add(part)
+                except (ValueError, TypeError):
+                    lanSubnets.add(part)
+        elif peerType == 2:
+            # Server: add its WG IP as /32
+            firstIp = (p.allowed_ip or '').split(',')[0].strip()
+            if firstIp:
+                try:
+                    ip = _ipaddress.ip_interface(firstIp).ip
+                    lanSubnets.add(f'{ip}/32')
+                except ValueError:
+                    lanSubnets.add(firstIp)
     # Always include the tunnel subnet so peers can see each other (mesh)
     tunnelSubnet = _configSubnetForPolicy(wc)
     if tunnelSubnet:
@@ -1540,12 +1552,7 @@ def API_addPeers(configName):
                         "is_gateway": peerType,
                     }]
                 )
-                # If server peer added to point-to-site config → set override to server's IP
-                if status and peerType == 2 and _mode == 'point-to-site' and allowed_ips:
-                    serverIp = allowed_ips[0].split('/')[0]
-                    _wc.configurationInfo.OverridePeerSettings.EndpointAllowedIPs = f'{serverIp}/32'
-                    _wc.storeConfigurationInfo()
-                # Sync gateway subnets if gateway/server
+                # Sync gateway/server subnets → updates override + routing
                 if status and peerType in (1, 2):
                     _syncGatewaySubnetsToConfig(config)
                 return ResponseObject(status=status, message=message, data=addedPeers)
