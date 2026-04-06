@@ -313,9 +313,13 @@ const tableDownloadPeer = (peer) => {
 
 const tableDeletePeer = (peer) => {
 	if (!confirm("Are you sure to delete this peer?")) return
-	fetchPost(`/api/deletePeers/${route.params.id}`, { peers: [peer.id] }, (res) => {
+	fetchPost(`/api/deletePeers/${route.params.id}`, { peers: [peer.id] }, async (res) => {
 		dashboardStore.newMessage("Server", res.message, res.status ? "success" : "danger")
-		fetchPeerList()
+		if (res.status) {
+			// Remove immediately from local state for instant UI feedback
+			configurationPeers.value = configurationPeers.value.filter(p => p.id !== peer.id)
+		}
+		await fetchPeerList()
 	})
 }
 
