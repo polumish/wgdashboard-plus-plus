@@ -853,7 +853,11 @@ def API_backup_settings():
 def API_backup_settings_update():
     data = request.get_json()
     for key, value in data.items():
-        DashboardConfig.SetConfig("Backup", key, str(value))
+        # Pass booleans directly so SetConfig handles them correctly
+        if isinstance(value, bool):
+            DashboardConfig.SetConfig("Backup", key, value)
+        else:
+            DashboardConfig.SetConfig("Backup", key, str(value))
     DashboardConfig.SaveConfig()
     return ResponseObject(status=True)
 
