@@ -1,6 +1,6 @@
 <script setup>
 import {onMounted, ref} from "vue";
-import {fetchGet, fetchPost} from "@/utilities/fetch.js";
+import {fetchGet, fetchPost, getUrl} from "@/utilities/fetch.js";
 import {useRoute} from "vue-router";
 import {DashboardConfigurationStore} from "@/stores/DashboardConfigurationStore.js";
 import LocaleText from "@/components/text/localeText.vue";
@@ -55,8 +55,7 @@ const deleteBackup = (name) => {
 }
 
 const downloadBackup = (name) => {
-	const base = window.location.origin
-	window.location.href = `${base}/api/backup/config/download?configName=${encodeURIComponent(configName)}&name=${encodeURIComponent(name)}`
+	window.location.href = getUrl(`/api/backup/config/download?configName=${encodeURIComponent(configName)}&name=${encodeURIComponent(name)}`)
 }
 
 const restoreBackup = (name) => {

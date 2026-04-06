@@ -1,6 +1,6 @@
 <script setup>
-import { ref, computed, onMounted, watch } from "vue";
-import { fetchGet, fetchPost } from "@/utilities/fetch.js";
+import { ref, computed, onMounted, watch, nextTick } from "vue";
+import { fetchGet, fetchPost, getUrl } from "@/utilities/fetch.js";
 import LocaleText from "@/components/text/localeText.vue";
 import dayjs from "dayjs";
 
@@ -40,7 +40,7 @@ const selectedDay = ref(null);
 const restoreModal = ref(false);
 const restoreTarget = ref(null);
 const restoreComponents = ref({
-    wireguard_configurations: true,
+    configurations: true,
     dashboard_settings: true,
     webhooks: true,
     peer_jobs: true,
@@ -54,6 +54,7 @@ const storageUsed = ref(0);
 
 // Debounce timer for settings auto-save
 let saveTimer = null;
+const loaded = ref(false);
 
 // ─── Computed ─────────────────────────────────────────────────────────────────
 
@@ -147,7 +148,7 @@ function loadSettings() {
     fetchGet("/api/backup/settings", {}, (res) => {
         if (res && res.status && res.data) {
             Object.assign(settings.value, res.data);
-
+            nextTick(() => { loaded.value = true; });
         }
     });
 }
@@ -183,8 +184,8 @@ function deleteBackup(name) {
 }
 
 function downloadBackup(name) {
-    const url = `/api/backup/global/download?name=${encodeURIComponent(name)}`;
-    window.location = url;
+    const url = getUrl(`/api/backup/global/download?name=${encodeURIComponent(name)}`);
+    window.location.href = url;
 }
 
 function openRestoreModal(backup) {
@@ -271,6 +272,7 @@ function nextMonth() {
 watch(
     settings,
     () => {
+        if (!loaded.value) return;
         scheduleSave();
     },
     { deep: true }

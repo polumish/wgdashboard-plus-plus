@@ -382,30 +382,30 @@ class BackupManager:
                 with open(dashboard_json) as f:
                     dashboard_data = json.load(f)
 
+                warnings = []
                 db_components = [c for c in components if c in _COMPONENT_TABLE_MAP]
                 if db_components:
-                    with self.db_engine.connect() as conn:
+                    with self.db_engine.begin() as conn:
                         for comp in db_components:
                             for table in _COMPONENT_TABLE_MAP[comp]:
                                 if table not in dashboard_data:
                                     continue
                                 if not self._is_valid_table_name(table):
                                     continue
-                                rows = dashboard_data[table]
-                                conn.execute(text(f'DELETE FROM "{table}"'))
-                                if rows:
-                                    cols = list(rows[0].keys())
-                                    col_names = ", ".join(f'"{c}"' for c in cols)
-                                    col_params = ", ".join(f":col_{c}" for c in cols)
-                                    conn.execute(
-                                        text(f'INSERT INTO "{table}" ({col_names}) VALUES ({col_params})'),
-                                        [{f"col_{k}": v for k, v in row.items()} for row in rows],
-                                    )
+                                try:
+                                    rows = dashboard_data[table]
+                                    conn.execute(text(f'DELETE FROM "{table}"'))
+                                    if rows:
+                                        cols = list(rows[0].keys())
+                                        col_names = ", ".join(f'"{c}"' for c in cols)
+                                        col_params = ", ".join(f":col_{c}" for c in cols)
+                                        conn.execute(
+                                            text(f'INSERT INTO "{table}" ({col_names}) VALUES ({col_params})'),
+                                            [{f"col_{k}": v for k, v in row.items()} for row in rows],
+                                        )
+                                except Exception as e:  # noqa: BLE001
+                                    warnings.append(f"Failed to restore table {table}: {str(e)}")
                             restored.append(comp)
-                        try:
-                            conn.commit()
-                        except Exception:  # noqa: BLE001
-                            pass
 
             # 4. Peers DB (restored alongside configurations)
             if "configurations" in components:
@@ -413,7 +413,7 @@ class BackupManager:
                 if os.path.isfile(peers_json):
                     with open(peers_json) as f:
                         peers_data = json.load(f)
-                    with self.db_engine.connect() as conn:
+                    with self.db_engine.begin() as conn:
                         for table, rows in peers_data.items():
                             if not self._is_valid_table_name(table):
                                 continue
@@ -427,14 +427,10 @@ class BackupManager:
                                         text(f'INSERT INTO "{table}" ({col_names}) VALUES ({col_params})'),
                                         [{f"col_{k}": v for k, v in row.items()} for row in rows],
                                     )
-                            except Exception:  # noqa: BLE001
-                                pass
-                        try:
-                            conn.commit()
-                        except Exception:  # noqa: BLE001
-                            pass
+                            except Exception as e:  # noqa: BLE001
+                                warnings.append(f"Failed to restore table {table}: {str(e)}")
 
-        return {"status": True, "restored": restored}
+        return {"status": True, "restored": restored, "warnings": warnings}
 
     def restoreConfigBackup(self, config_name: str, name: str) -> dict:
         """Restore a single per-config backup (.conf file + peers DB tables).
@@ -466,11 +462,12 @@ class BackupManager:
                 shutil.copy2(conf_backup, dest)
 
             # 2. Restore peers DB tables
+            warnings = []
             peers_json = os.path.join(backup_dir, "peers.json")
             if os.path.isfile(peers_json):
                 with open(peers_json) as f:
                     peers_data = json.load(f)
-                with self.db_engine.connect() as conn:
+                with self.db_engine.begin() as conn:
                     for table, rows in peers_data.items():
                         # Skip legacy SQL migration entries
                         if table == "_legacy_sql":
@@ -487,14 +484,10 @@ class BackupManager:
                                     text(f'INSERT INTO "{table}" ({col_names}) VALUES ({col_params})'),
                                     [{f"col_{k}": v for k, v in row.items()} for row in rows],
                                 )
-                        except Exception:  # noqa: BLE001
-                            pass
-                    try:
-                        conn.commit()
-                    except Exception:  # noqa: BLE001
-                        pass
+                        except Exception as e:  # noqa: BLE001
+                            warnings.append(f"Failed to restore table {table}: {str(e)}")
 
-        return {"status": True, "restored": config_name}
+        return {"status": True, "restored": config_name, "warnings": warnings}
 
     # -----------------------------------------------------------------------
     # Rotation and Storage Limits
@@ -520,6 +513,7 @@ class BackupManager:
 
         Manual snapshots are NEVER auto-deleted.
         """
+        # filter_type uses raw manifest trigger values; type map for keep limits
         keep_map = {
             "scheduled_daily": daily_keep,
             "scheduled_weekly": weekly_keep,
@@ -545,7 +539,7 @@ class BackupManager:
 
             # Get all non-manual snapshots, oldest first
             all_snapshots = self.getGlobalSnapshots()
-            non_manual = [s for s in all_snapshots if s["trigger"] != "manual"]
+            non_manual = [s for s in all_snapshots if s["type"] != "manual"]
             if not non_manual:
                 break  # Nothing left to delete (only manual snapshots remain)
 
@@ -682,6 +676,16 @@ class BackupManager:
                     pass
         return total
 
+    # Map raw trigger values stored in manifest to simplified frontend type names
+    _TRIGGER_TYPE_MAP = {
+        "scheduled_daily": "daily",
+        "scheduled_weekly": "weekly",
+        "scheduled_monthly": "monthly",
+        "event": "auto",
+        "manual": "manual",
+        "legacy_migration": "legacy",
+    }
+
     def _read_snapshot_list(
         self, directory: str, filter_type: Optional[str] = None
     ) -> list:
@@ -699,22 +703,25 @@ class BackupManager:
             try:
                 with open(manifest_path) as f:
                     m = json.load(f)
-                if filter_type is not None and m.get("trigger") != filter_type:
+                raw_trigger = m.get("trigger", "")
+                if filter_type is not None and raw_trigger != filter_type:
                     continue
+                simplified_type = self._TRIGGER_TYPE_MAP.get(raw_trigger, raw_trigger)
                 snapshots.append(
                     {
                         "name": entry.name,
-                        "timestamp": m.get("timestamp", ""),
-                        "trigger": m.get("trigger", ""),
-                        "size_bytes": m.get("size_bytes", 0),
+                        "date": m.get("timestamp", ""),
+                        "type": simplified_type,
+                        "size": m.get("size_bytes", 0),
+                        "event": m.get("event_detail", ""),
                         "components": m.get("components", []),
                     }
                 )
             except Exception:  # noqa: BLE001
                 continue
 
-        # Newest first — sort by timestamp string (ISO-8601 sorts lexicographically)
-        snapshots.sort(key=lambda s: s["timestamp"], reverse=True)
+        # Newest first — sort by date string (ISO-8601 sorts lexicographically)
+        snapshots.sort(key=lambda s: s["date"], reverse=True)
         return snapshots
 
     def _delete_directory(self, path: str) -> bool:

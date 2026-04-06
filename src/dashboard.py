@@ -845,7 +845,8 @@ def API_backup_settings():
             "auto_backup_debounce_seconds", "auto_backup_max_wait_seconds", "per_config_keep"]
     settings = {}
     for key in keys:
-        settings[key] = DashboardConfig.GetConfig("Backup", key)
+        _, value = DashboardConfig.GetConfig("Backup", key)
+        settings[key] = value
     return ResponseObject(data=settings)
 
 @app.post(f'{APP_PREFIX}/api/backup/settings/update')
@@ -984,7 +985,7 @@ def API_deletePeers(configName: str) -> ResponseObject:
         # Re-sync gateway subnets (in case deleted peer was a gateway)
         _syncGatewaySubnetsToConfig(configuration)
         try:
-            AllBackupScheduler.onPeerChange(configName, "peer_deleted", "")
+            AllBackupScheduler.onPeerChange(configName, "peer_deleted", f"{len(peers)} peers")
         except Exception:
             pass
         return ResponseObject(status, msg)
@@ -1001,7 +1002,7 @@ def API_restrictPeers(configName: str) -> ResponseObject:
         configuration = WireguardConfigurations.get(configName)
         status, msg = configuration.restrictPeers(peers)
         try:
-            AllBackupScheduler.onPeerChange(configName, "peer_restricted", "")
+            AllBackupScheduler.onPeerChange(configName, "peer_restricted", f"{len(peers)} peers")
         except Exception:
             pass
         return ResponseObject(status, msg)
@@ -1072,7 +1073,7 @@ def API_allowAccessPeers(configName: str) -> ResponseObject:
         configuration = WireguardConfigurations.get(configName)
         status, msg = configuration.allowAccessPeers(peers)
         try:
-            AllBackupScheduler.onPeerChange(configName, "peer_allowed", "")
+            AllBackupScheduler.onPeerChange(configName, "peer_allowed", f"{len(peers)} peers")
         except Exception:
             pass
         return ResponseObject(status, msg)
@@ -1637,7 +1638,7 @@ def API_addPeers(configName):
                 status, addedPeers, message = config.addPeers(keyPairs)
                 if status:
                     try:
-                        AllBackupScheduler.onPeerChange(configName, "peer_added", "")
+                        AllBackupScheduler.onPeerChange(configName, "peer_added", f"{len(keyPairs)} peers")
                     except Exception:
                         pass
                 return ResponseObject(status=status, message=message, data=addedPeers)
@@ -1705,7 +1706,7 @@ def API_addPeers(configName):
                     _syncGatewaySubnetsToConfig(config)
                 if status:
                     try:
-                        AllBackupScheduler.onPeerChange(configName, "peer_added", "")
+                        AllBackupScheduler.onPeerChange(configName, "peer_added", name or public_key)
                     except Exception:
                         pass
                 return ResponseObject(status=status, message=message, data=addedPeers)

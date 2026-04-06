@@ -184,11 +184,11 @@ class TestBackupManagerGlobalSnapshots:
 
         manual = mgr.getGlobalSnapshots(filter_type="manual")
         assert len(manual) == 1
-        assert manual[0]["trigger"] == "manual"
+        assert manual[0]["type"] == "manual"
 
         scheduled = mgr.getGlobalSnapshots(filter_type="scheduled")
         assert len(scheduled) == 1
-        assert scheduled[0]["trigger"] == "scheduled"
+        assert scheduled[0]["type"] == "scheduled"
 
 
 # ---------------------------------------------------------------------------
@@ -482,7 +482,7 @@ class TestBackupManagerRotation:
 
         # Manual snapshots must survive
         remaining = mgr.getGlobalSnapshots()
-        manual_remaining = [s for s in remaining if s["trigger"] == "manual"]
+        manual_remaining = [s for s in remaining if s["type"] == "manual"]
         assert len(manual_remaining) == 3
 
     def test_enforce_per_config_rotation(self, backup_env):
