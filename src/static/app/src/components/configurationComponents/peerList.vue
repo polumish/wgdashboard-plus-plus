@@ -334,6 +334,13 @@ const tableRestrictPeer = (peer) => {
 	})
 }
 
+const tableAllowAccessPeer = (peer) => {
+	fetchPost(`/api/allowAccessPeers/${route.params.id}`, { peers: [peer.id] }, (res) => {
+		dashboardStore.newMessage("Server", res.message, res.status ? "success" : "danger")
+		fetchPeerList()
+	})
+}
+
 const tableBroadcastAllowedIPs = (peer) => {
 	if (!confirm(`Broadcast this peer's AllowedIPs (${peer.allowed_ip}) to all other peers?`)) return
 	fetchPost(`/api/broadcastPeerAllowedIPs/${route.params.id}`, { id: peer.id }, (res) => {
@@ -613,7 +620,8 @@ watch(() => route.query.id, (newValue) => {
 									<li><a class="dropdown-item d-flex" role="button" @click="configurationModalSelectedPeer = peer; configurationModals.assignPeer.modalOpen = true"><i class="me-auto bi bi-diagram-2"></i> <LocaleText t="Assign Peer"></LocaleText></a></li>
 									<li><a class="dropdown-item d-flex" role="button" @click="tableBroadcastAllowedIPs(peer)"><i class="me-auto bi bi-broadcast"></i> <LocaleText t="Broadcast AllowedIPs"></LocaleText></a></li>
 									<li><hr class="dropdown-divider"></li>
-									<li><a class="dropdown-item d-flex text-warning" role="button" @click="tableRestrictPeer(peer)"><i class="me-auto bi bi-lock"></i> <LocaleText t="Restrict Access"></LocaleText></a></li>
+									<li v-if="!peer.restricted"><a class="dropdown-item d-flex text-warning" role="button" @click="tableRestrictPeer(peer)"><i class="me-auto bi bi-lock"></i> <LocaleText t="Restrict Access"></LocaleText></a></li>
+									<li v-else><a class="dropdown-item d-flex text-success" role="button" @click="tableAllowAccessPeer(peer)"><i class="me-auto bi bi-unlock"></i> <LocaleText t="Allow Access"></LocaleText></a></li>
 									<li><a class="dropdown-item d-flex text-danger fw-bold" role="button" @click="tableDeletePeer(peer)"><i class="me-auto bi bi-trash"></i> <LocaleText t="Delete"></LocaleText></a></li>
 								</ul>
 							</div>
@@ -686,7 +694,8 @@ watch(() => route.query.id, (newValue) => {
 										<li><a class="dropdown-item d-flex" role="button" @click="configurationModalSelectedPeer = peer; configurationModals.assignPeer.modalOpen = true"><i class="me-auto bi bi-diagram-2"></i> <LocaleText t="Assign Peer"></LocaleText></a></li>
 										<li><a class="dropdown-item d-flex" role="button" @click="tableBroadcastAllowedIPs(peer)"><i class="me-auto bi bi-broadcast"></i> <LocaleText t="Broadcast AllowedIPs"></LocaleText></a></li>
 										<li><hr class="dropdown-divider"></li>
-										<li><a class="dropdown-item d-flex text-warning" role="button" @click="tableRestrictPeer(peer)"><i class="me-auto bi bi-lock"></i> <LocaleText t="Restrict Access"></LocaleText></a></li>
+										<li v-if="!peer.restricted"><a class="dropdown-item d-flex text-warning" role="button" @click="tableRestrictPeer(peer)"><i class="me-auto bi bi-lock"></i> <LocaleText t="Restrict Access"></LocaleText></a></li>
+										<li v-else><a class="dropdown-item d-flex text-success" role="button" @click="tableAllowAccessPeer(peer)"><i class="me-auto bi bi-unlock"></i> <LocaleText t="Allow Access"></LocaleText></a></li>
 										<li><a class="dropdown-item d-flex text-danger fw-bold" role="button" @click="tableDeletePeer(peer)"><i class="me-auto bi bi-trash"></i> <LocaleText t="Delete"></LocaleText></a></li>
 									</ul>
 								</div>
