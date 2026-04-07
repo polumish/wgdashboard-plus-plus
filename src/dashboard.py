@@ -102,7 +102,7 @@ def peerInformationBackgroundThread():
                                     c.logPeersHistoryEndpoint()
                             c.getRestrictedPeersList()
             except Exception as e:
-                app.logger.error(f"[WGDashboard] Background Thread #1 Error", e)
+                app.logger.error("[WGDashboard] Background Thread #1 Error: %s", e)
 
         if delay == 6:
             delay = 1
@@ -232,7 +232,14 @@ with app.app_context():
     _ini_path = os.path.join(CONFIGURATION_PATH, "wg-dashboard.ini")
 
     from modules.ConnectionString import ConnectionString
-    _db_engine = sqlalchemy.create_engine(ConnectionString("wgdashboard"))
+    _backup_conn_str = ConnectionString("wgdashboard")
+    # Backup reads all tables — use timeout to wait for lock release
+    # instead of failing immediately when background threads hold the lock
+    _backup_connect_args = {"timeout": 30} if _backup_conn_str.startswith("sqlite") else {}
+    _db_engine = sqlalchemy.create_engine(
+        _backup_conn_str,
+        connect_args=_backup_connect_args,
+    )
 
     AllBackupManager = BackupManager(
         backup_path=_backup_path,
@@ -370,7 +377,7 @@ def API_AuthenticateLogin():
                 except ValueError:
                     pass
         if not totpBypassed:
-            totpValid = pyotp.TOTP(DashboardConfig.GetConfig("Account", "totp_key")[1]).now() == data['totp']
+            totpValid = pyotp.TOTP(DashboardConfig.GetConfig("Account", "totp_key")[1]).now() == data.get('totp', '')
 
     if (valid
             and data['username'] == DashboardConfig.GetConfig("Account", "username")[1]
