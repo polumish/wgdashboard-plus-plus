@@ -235,10 +235,11 @@ class BackupScheduler:
         self._create_pre_change_backup(config_name, change_detail)
 
     def _create_pre_change_backup(self, config_name: str, event_detail: str) -> None:
-        """Create a backup synchronously with cooldown to avoid duplicates.
+        """Create a backup in a background thread with cooldown.
 
-        If a backup for this config was already created within the last
-        `_debounce_seconds`, skip to avoid noise from bulk operations.
+        Non-blocking: the API request returns immediately while the backup
+        runs in a daemon thread.  If a backup for this config was already
+        created within the last `_debounce_seconds`, skip silently.
         """
         import time
         now = time.time()
@@ -248,20 +249,24 @@ class BackupScheduler:
                 return  # cooldown — skip
             self._last_pre_change[config_name] = now
 
-        try:
-            self.bm.createConfigBackup(
-                config_name=config_name,
-                trigger="event",
-                event_detail=event_detail,
-            )
-            per_config_keep = self._get_config("Backup", "per_config_keep")
+        def _do_backup():
             try:
-                keep = int(per_config_keep)
-            except (TypeError, ValueError):
-                keep = 10
-            self.bm.enforcePerConfigRotation(config_name, keep=keep)
-        except Exception as e:
-            logging.error("Pre-change backup error for %s: %s", config_name, e)
+                self.bm.createConfigBackup(
+                    config_name=config_name,
+                    trigger="event",
+                    event_detail=event_detail,
+                )
+                per_config_keep = self._get_config("Backup", "per_config_keep")
+                try:
+                    keep = int(per_config_keep)
+                except (TypeError, ValueError):
+                    keep = 10
+                self.bm.enforcePerConfigRotation(config_name, keep=keep)
+            except Exception as e:
+                logging.error("Pre-change backup error for %s: %s", config_name, e)
+
+        t = threading.Thread(target=_do_backup, daemon=True)
+        t.start()
 
     # -----------------------------------------------------------------------
     # Debounce machinery

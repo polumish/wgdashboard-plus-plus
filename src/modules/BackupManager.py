@@ -224,23 +224,20 @@ class BackupManager:
                 # 1. Copy .conf file
                 shutil.copy2(conf_file, os.path.join(backup_dir, f"{config_name}.conf"))
 
-                # 2. DB export — only tables for this config
-                db_dir = os.path.join(backup_dir)
-                all_data = self._export_database()
+                # 2. DB export — only tables for this config (targeted, not full DB scan)
+                target_tables = [config_name]
+                for suf in CONFIG_TABLE_SUFFIXES[1:]:
+                    if suf not in CONFIG_TABLE_SUFFIXES_SKIP_PERCONFIG:
+                        target_tables.append(f"{config_name}{suf}")
+                target_tables.append("ConfigurationsInfo")
 
-                # Tables belonging to this config (skip transfer/history — too large, not needed for restore)
-                config_tables = {
-                    tbl: rows
-                    for tbl, rows in all_data.items()
-                    if (tbl == config_name
-                        or any(tbl == f"{config_name}{suf}" for suf in CONFIG_TABLE_SUFFIXES[1:]))
-                    and not any(tbl.endswith(skip) for skip in CONFIG_TABLE_SUFFIXES_SKIP_PERCONFIG)
-                }
-                # Also include ConfigurationsInfo row for this config
-                if "ConfigurationsInfo" in all_data:
+                config_tables = self._export_tables(target_tables)
+
+                # Filter ConfigurationsInfo to only this config's row
+                if "ConfigurationsInfo" in config_tables:
                     config_tables["ConfigurationsInfo"] = [
-                        row for row in all_data["ConfigurationsInfo"]
-                        if row.get("Name") == config_name
+                        row for row in config_tables["ConfigurationsInfo"]
+                        if row.get("Name") == config_name or row.get("ID") == config_name
                     ]
 
                 peers_path = os.path.join(backup_dir, "peers.json")
@@ -670,15 +667,21 @@ class BackupManager:
 
     def _export_database(self) -> dict:
         """Export all tables from the database as {table_name: [row_dict, ...]}."""
-        result = {}
         try:
             inspector = inspect(self.db_engine)
             table_names = inspector.get_table_names()
+        except Exception:  # noqa: BLE001
+            return {}
+        return self._export_tables(table_names)
 
+    def _export_tables(self, table_names: list) -> dict:
+        """Export specific tables from the database as {table_name: [row_dict, ...]}."""
+        result = {}
+        try:
             with self.db_engine.connect() as conn:
                 for table_name in table_names:
                     try:
-                        rows = conn.execute(text(f"SELECT * FROM \"{table_name}\""))
+                        rows = conn.execute(text(f'SELECT * FROM "{table_name}"'))
                         keys = list(rows.keys())
                         result[table_name] = [dict(zip(keys, row)) for row in rows]
                     except Exception:  # noqa: BLE001
