@@ -117,13 +117,15 @@ class BackupManager:
                         os.path.join(settings_dir, "wg-dashboard.ini"),
                     )
 
-                # 3. DB export
+                # 3. DB export (skip transfer/history tables — too large, not needed for restore)
                 db_dir = os.path.join(snap_dir, "db")
                 os.makedirs(db_dir, exist_ok=True)
                 all_data = self._export_database()
 
                 peers_data = {
-                    k: v for k, v in all_data.items() if k not in DASHBOARD_TABLES
+                    k: v for k, v in all_data.items()
+                    if k not in DASHBOARD_TABLES
+                    and not any(k.endswith(skip) for skip in CONFIG_TABLE_SUFFIXES_SKIP_PERCONFIG)
                 }
                 dashboard_data = {
                     k: v for k, v in all_data.items() if k in DASHBOARD_TABLES
@@ -665,11 +667,20 @@ class BackupManager:
                 return candidate
         return None
 
-    def _export_database(self) -> dict:
-        """Export all tables from the database as {table_name: [row_dict, ...]}."""
+    def _export_database(self, skip_heavy: bool = True) -> dict:
+        """Export all tables from the database as {table_name: [row_dict, ...]}.
+
+        If skip_heavy=True (default), skips _transfer and _history_endpoint tables
+        which can contain hundreds of thousands of rows and are not needed for restore.
+        """
         try:
             inspector = inspect(self.db_engine)
             table_names = inspector.get_table_names()
+            if skip_heavy:
+                table_names = [
+                    t for t in table_names
+                    if not any(t.endswith(s) for s in CONFIG_TABLE_SUFFIXES_SKIP_PERCONFIG)
+                ]
         except Exception:  # noqa: BLE001
             return {}
         return self._export_tables(table_names)
