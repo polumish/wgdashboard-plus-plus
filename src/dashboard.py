@@ -881,14 +881,18 @@ def API_backup_global_restore():
     data = request.get_json()
     name = data.get("name", "")
     components = data.get("components", [])
-    result = AllBackupManager.restoreFromSnapshot(name, components)
-    if result["status"]:
-        if "dashboard_settings" in components:
-            DashboardConfig.ReloadConfig()
-        if "configurations" in components:
-            # WG reload in background — don't block the API response
-            threading.Thread(target=_reload_wireguard_configurations, daemon=True).start()
-    return ResponseObject(status=result["status"], message=result.get("message", ""), data=result.get("restored", []))
+
+    def _do_restore():
+        result = AllBackupManager.restoreFromSnapshot(name, components)
+        if result.get("status"):
+            if "dashboard_settings" in components:
+                DashboardConfig.ReloadConfig()
+            if "configurations" in components:
+                _reload_wireguard_configurations()
+
+    # Run entire restore in background — don't block the API response
+    threading.Thread(target=_do_restore, daemon=True).start()
+    return ResponseObject(status=True, message="Restore started")
 
 @app.get(f'{APP_PREFIX}/api/backup/config/list')
 def API_backup_config_list():
@@ -922,10 +926,13 @@ def API_backup_config_restore():
     data = request.get_json()
     config_name = data.get("configName", "")
     name = data.get("name", "")
-    result = AllBackupManager.restoreConfigBackup(config_name, name)
-    if result.get("status"):
-        threading.Thread(target=_reload_wireguard_configurations, daemon=True).start()
-    return ResponseObject(status=result.get("status", False), message=result.get("message", ""))
+    def _do_config_restore():
+        result = AllBackupManager.restoreConfigBackup(config_name, name)
+        if result.get("status"):
+            _reload_wireguard_configurations()
+
+    threading.Thread(target=_do_config_restore, daemon=True).start()
+    return ResponseObject(status=True, message="Restore started")
 
 @app.get(f'{APP_PREFIX}/api/backup/settings')
 def API_backup_settings():
