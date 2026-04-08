@@ -5,6 +5,20 @@ All notable changes to WgDashboard++ will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to a custom versioning scheme: **X.YZ** where X=major, Y=feature (+0.1), Z=bugfix (+0.01).
 
+## [v1.5] - 2026-04-08
+
+### Improved
+- **Non-blocking full database backup** — global snapshots now use `sqlite3.backup()` API to create an atomic copy of the entire database (including transfer history) without blocking the server. Previously, reading 177,000+ transfer rows via SELECT locked the database and froze the dashboard for minutes
+- **Backup size reduced 600x for JSON export** — per-config and granular restore data excludes transfer/history tables (reduced from ~54 MB to ~90 KB). Full database is still preserved as a binary `.db` file in each snapshot
+- **Backup hooks run in background thread** — auto-backup before peer/config changes no longer blocks the API response. The dashboard remains responsive during backup creation
+- **Targeted DB export for per-config backups** — only reads tables belonging to that specific configuration instead of scanning the entire database
+
+### Fixed
+- **Server freeze when adding peers** — the backup hook was synchronously exporting all 38 database tables (including 177k transfer rows) inside the API request handler, blocking the single gunicorn worker. Now runs in a background thread with targeted table export
+- **"Allow Access" button missing in Table and Columns views** — restricted peers showed "Restrict Access" instead of "Allow Access" in the action dropdown. Card/Grid/List views were not affected
+- **Auto-backup toggles resetting to off** — `str(True)` produced "True" (capital T) but configparser only recognizes "true" (lowercase), causing settings to silently revert after save
+- **Settings overwritten on page load** — Vue watcher fired immediately on mount, sending default values back to server before actual settings were loaded
+
 ## [v1.4] - 2026-04-06
 
 ### Added
