@@ -36,30 +36,67 @@ Each VPN protocol implements a class inheriting from `BaseVPNAdapter`.
 | KEY_MANAGEMENT | generate_keys, rotate_keys | Y | N | N |
 | ACCESS_CONTROL | restrict_peer, unrestrict_peer | Y | Y | Y (authorize/deauthorize) |
 
-### Directory structure
+### Plugin architecture
 
+Adapters are **standalone plugins**, not hardcoded into the core. MouseHole core ships with zero VPN adapters — each protocol is installed separately.
+
+**Distribution:**
+- `mousehole-core` — the dashboard, UI, routing engine, backup system. No VPN code.
+- `mousehole-wireguard` — WireGuard + AmneziaWG adapter
+- `mousehole-openvpn` — OpenVPN adapter + built-in CA
+- `mousehole-zerotier` — ZeroTier adapter
+
+**Installation methods:**
+- `pip install mousehole-wireguard` (when published to PyPI)
+- Copy adapter directory into `src/adapters/` (manual / git clone)
+- Docker: separate images per combo (`mousehole-wg`, `mousehole-full`) or mount adapter dirs as volumes
+
+**Each adapter directory is self-contained:**
 ```
 src/adapters/
-    base.py                 # BaseVPNAdapter, Capability enum
-    registry.py             # discover and register adapters at startup
-    wireguard/
+    base.py                 # BaseVPNAdapter, Capability enum (part of core)
+    registry.py             # discover, enable/disable adapters (part of core)
+    wireguard/              # mousehole-wireguard plugin
         __init__.py         # WireGuardAdapter(BaseVPNAdapter)
         parser.py           # wg show parsing, .conf file handling
-    openvpn/
+        manifest.json       # {"name": "WireGuard", "version": "1.0", "author": "..."}
+    openvpn/                # mousehole-openvpn plugin
         __init__.py         # OpenVPNAdapter(BaseVPNAdapter)
         management.py       # OpenVPN management interface (TCP socket)
         pki.py              # minimal CA: generate/revoke certs, CRL
-    zerotier/
+        manifest.json
+    zerotier/               # mousehole-zerotier plugin
         __init__.py         # ZeroTierAdapter(BaseVPNAdapter)
         api_client.py       # ZeroTier local API wrapper (localhost:9993)
+        manifest.json
 ```
 
 ### Registration flow
 
-1. At startup, MouseHole scans `src/adapters/` for subclasses of `BaseVPNAdapter`
-2. Each adapter's `__init__` probes the system (is WireGuard installed? is OpenVPN running?)
-3. Adapter registers itself with its list of capabilities
-4. UI queries the registry to determine which actions to show per interface
+1. At startup, MouseHole scans `src/adapters/` for directories containing `manifest.json`
+2. Checks `wg-dashboard.ini` section `[Adapters]` for enabled/disabled state
+3. For each enabled adapter: loads the module, calls `probe()` to check if the VPN service is available on this system
+4. Adapter registers itself with its list of capabilities
+5. UI queries the registry to determine which actions to show per interface
+
+### Adapter management in UI
+
+Settings → Adapters page:
+- List of discovered adapters (installed on disk) with name, version, author from manifest
+- Toggle switch to enable/disable each adapter (persisted to ini)
+- Status indicator: installed / enabled / active (VPN service detected) / error
+- Disabled adapters are completely invisible in the rest of the UI
+
+### ini config example
+
+```ini
+[Adapters]
+wireguard = enabled
+openvpn = enabled
+zerotier = disabled
+```
+
+A user who only needs WireGuard installs only the WG plugin and gets a clean, lightweight dashboard with no OpenVPN/ZeroTier clutter.
 
 ## 2. Data Model
 
