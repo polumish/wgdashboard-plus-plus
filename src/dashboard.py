@@ -182,21 +182,72 @@ AllBackupScheduler: BackupScheduler = None
 
 def _reload_wireguard_configurations():
     """Reinitialize WireGuard configurations after a restore.
-    Removes configs that no longer exist on disk, re-reads changed ones."""
+
+    1. Bring down WG interfaces that no longer have a .conf file
+    2. Remove stale config objects from WireguardConfigurations dict
+    3. Re-read all configs from disk (InitWireguardConfigurationsList)
+    4. Bring up interfaces that were in the restored autostart list
+    """
     global WireguardConfigurations
-    # Find configs on disk
+
+    # Find configs currently on disk
     disk_confs = set()
     wg_path = DashboardConfig.GetConfig("Server", "wg_conf_path")[1]
     if os.path.isdir(wg_path):
         for f in os.listdir(wg_path):
             if f.endswith(".conf"):
                 disk_confs.add(f.replace(".conf", ""))
-    # Remove configs not on disk anymore
+
+    # 1. Bring down interfaces that are no longer on disk
     stale = [k for k in WireguardConfigurations.keys() if k not in disk_confs]
-    for k in stale:
-        del WireguardConfigurations[k]
-    # Reinitialize (adds new, updates changed)
+    for name in stale:
+        try:
+            conf = WireguardConfigurations[name]
+            if conf.Status:
+                subprocess.run(
+                    f"{conf.Protocol}-quick down {name}",
+                    shell=True, capture_output=True, timeout=10
+                )
+        except Exception:
+            pass
+        del WireguardConfigurations[name]
+
+    # 2. Bring down remaining interfaces so they can be re-read cleanly
+    for name, conf in list(WireguardConfigurations.items()):
+        try:
+            if conf.Status:
+                subprocess.run(
+                    f"{conf.Protocol}-quick down {name}",
+                    shell=True, capture_output=True, timeout=10
+                )
+        except Exception:
+            pass
+
+    # 3. Re-read all configs from disk
+    WireguardConfigurations.clear()
     InitWireguardConfigurationsList()
+
+    # 4. Bring up interfaces that are in autostart
+    _, autostart_raw = DashboardConfig.GetConfig("WireGuardConfiguration", "autostart")
+    if autostart_raw and isinstance(autostart_raw, list):
+        autostart = set(autostart_raw)
+    elif autostart_raw and isinstance(autostart_raw, str):
+        autostart = set(filter(None, autostart_raw.split("||")))
+    else:
+        autostart = set()
+
+    for name in autostart:
+        if name in WireguardConfigurations:
+            try:
+                conf = WireguardConfigurations[name]
+                if not conf.Status:
+                    subprocess.run(
+                        f"{conf.Protocol}-quick up {name}",
+                        shell=True, capture_output=True, timeout=10
+                    )
+                    conf.getStatus()
+            except Exception:
+                pass
 
 dictConfig({
     'version': 1,
