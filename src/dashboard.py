@@ -882,11 +882,12 @@ def API_backup_global_restore():
     name = data.get("name", "")
     components = data.get("components", [])
     result = AllBackupManager.restoreFromSnapshot(name, components)
-    if result["status"] and "configurations" in components:
-        # Reinitialize WireGuard configurations after restore
-        _reload_wireguard_configurations()
-    if result["status"] and "dashboard_settings" in components:
-        DashboardConfig.ReloadConfig()
+    if result["status"]:
+        if "dashboard_settings" in components:
+            DashboardConfig.ReloadConfig()
+        if "configurations" in components:
+            # WG reload in background — don't block the API response
+            threading.Thread(target=_reload_wireguard_configurations, daemon=True).start()
     return ResponseObject(status=result["status"], message=result.get("message", ""), data=result.get("restored", []))
 
 @app.get(f'{APP_PREFIX}/api/backup/config/list')
@@ -923,7 +924,7 @@ def API_backup_config_restore():
     name = data.get("name", "")
     result = AllBackupManager.restoreConfigBackup(config_name, name)
     if result.get("status"):
-        _reload_wireguard_configurations()
+        threading.Thread(target=_reload_wireguard_configurations, daemon=True).start()
     return ResponseObject(status=result.get("status", False), message=result.get("message", ""))
 
 @app.get(f'{APP_PREFIX}/api/backup/settings')

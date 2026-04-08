@@ -220,8 +220,8 @@ function doRestore() {
         // Reload regardless of response — DB is replaced, session invalidated
         window.location.reload();
     });
-    // Safety: if fetchPost never calls back (timeout), reload after 15 seconds
-    setTimeout(() => { window.location.reload(); }, 15000);
+    // Safety: if fetchPost never calls back (timeout), reload after 5 seconds
+    setTimeout(() => { window.location.reload(); }, 5000);
 }
 
 function typeBadgeClass(type) {
