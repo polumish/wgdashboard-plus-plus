@@ -54,6 +54,10 @@ export default {
 				{
 					id: "backup",
 					title: "Backup & Restore"
+				},
+				{
+					id: "network_diagnostics",
+					title: "Network Diagnostics"
 				}
 			]
 		}

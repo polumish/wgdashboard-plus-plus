@@ -73,6 +73,14 @@ const router = createRouter({
                             meta: {
                                 title: "Backup & Restore"
                             }
+                        },
+                        {
+                            name: "Network Diagnostics",
+                            path: "network_diagnostics",
+                            component: () => import("@/components/settingsComponent/networkDiagnosticsSettings.vue"),
+                            meta: {
+                                title: "Network Diagnostics"
+                            }
                         }
                     ],
 					meta: {
