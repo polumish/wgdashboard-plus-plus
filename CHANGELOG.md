@@ -7,17 +7,33 @@ and this project adheres to a custom versioning scheme: **X.YZ** where X=major, 
 
 ## [v1.5] - 2026-04-08
 
+### BREAKING CHANGE: MariaDB required
+Starting with v1.5, WGDashboard++ requires **MariaDB** instead of SQLite. SQLite caused server freezes due to file-level locking when multiple threads (backup, peer updates, API requests) accessed the database concurrently. MariaDB handles concurrent access natively.
+
+**Bare-metal migration:** `cd /opt/WGDashboard/src && sudo ./migrate_to_mariadb.sh`
+**Docker:** Use the new `docker-compose.yml` which includes a MariaDB container. Auto-migration runs on first startup if a SQLite database is detected.
+
+### Added
+- **MariaDB support (required)** — eliminates all SQLite locking issues. No more server freezes during backups, restores, or concurrent operations
+- **Auto-migration script** — `migrate_to_mariadb.sh` for bare-metal, automatic migration in Docker entrypoint
+- **Docker Compose** — `docker/docker-compose.yml` with WGDashboard + MariaDB containers, health checks, persistent volumes
+- **Restore progress bar** — polling-based progress indicator showing restore stages (1-6) with animated progress bar
+- **Backup content preview** — click any backup to see expandable tree: config names, peer counts, dashboard components
+- **Separate restore points** — restore points displayed in collapsible section below regular backups
+- **Green indicator on last restore** — green dot on backup name and calendar day of the most recent restore
+- **Auto-reload after restore** — WireGuard interfaces automatically stopped/restarted, configs re-read, page reloads
+
 ### Improved
-- **Non-blocking full database backup** — global snapshots now use `sqlite3.backup()` API to create an atomic copy of the entire database (including transfer history) without blocking the server. Previously, reading 177,000+ transfer rows via SELECT locked the database and froze the dashboard for minutes
-- **Backup size reduced 600x for JSON export** — per-config and granular restore data excludes transfer/history tables (reduced from ~54 MB to ~90 KB). Full database is still preserved as a binary `.db` file in each snapshot
-- **Backup hooks run in background thread** — auto-backup before peer/config changes no longer blocks the API response. The dashboard remains responsive during backup creation
-- **Targeted DB export for per-config backups** — only reads tables belonging to that specific configuration instead of scanning the entire database
+- **Non-blocking backups** — removed threading lock that caused deadlocks. All backup operations (create, restore) run without blocking the API
+- **Backup size reduced 600x** — per-config backups exclude transfer/history tables (~90 KB vs ~54 MB)
+- **Backup hooks in background** — auto-backup before peer/config changes runs in background thread
 
 ### Fixed
-- **Server freeze when adding peers** — the backup hook was synchronously exporting all 38 database tables (including 177k transfer rows) inside the API request handler, blocking the single gunicorn worker. Now runs in a background thread with targeted table export
-- **"Allow Access" button missing in Table and Columns views** — restricted peers showed "Restrict Access" instead of "Allow Access" in the action dropdown. Card/Grid/List views were not affected
-- **Auto-backup toggles resetting to off** — `str(True)` produced "True" (capital T) but configparser only recognizes "true" (lowercase), causing settings to silently revert after save
-- **Settings overwritten on page load** — Vue watcher fired immediately on mount, sending default values back to server before actual settings were loaded
+- **Server freeze on backup/restore** — SQLite file locking with concurrent threads caused complete server hang. Resolved by MariaDB migration + lock removal
+- **Restore not replacing old configs** — restore now properly removes configs not in backup and replaces the full database
+- **"Allow Access" button missing** — Table and Columns views now correctly show Allow/Restrict based on peer state
+- **Auto-backup toggles resetting** — boolean serialization fixed (True→"true" not "True")
+- **Settings overwritten on mount** — added `loaded` guard to prevent Vue watcher from saving defaults
 
 ## [v1.4] - 2026-04-06
 

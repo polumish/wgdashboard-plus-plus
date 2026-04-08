@@ -136,6 +136,53 @@ ensure_installation() {
   fi
 }
 
+set_database() {
+  printf "\n------------- DATABASE CONFIGURATION -----------------------\n"
+
+  if [ -n "$WG_DB_TYPE" ]; then
+    echo "Configuring database from environment variables:"
+    set_ini Database type "${WG_DB_TYPE}"
+    [[ -n "$WG_DB_HOST" ]] && set_ini Database host "${WG_DB_HOST}"
+    [[ -n "$WG_DB_PORT" ]] && set_ini Database port "${WG_DB_PORT}"
+    [[ -n "$WG_DB_USER" ]] && set_ini Database username "${WG_DB_USER}"
+    [[ -n "$WG_DB_PASSWORD" ]] && set_ini Database password "${WG_DB_PASSWORD}"
+  fi
+
+  # Auto-migrate from SQLite to MySQL if needed
+  local db_type
+  db_type=$(grep -A1 '\[Database\]' "$config_file" 2>/dev/null | grep 'type' | awk -F= '{print $2}' | tr -d ' ')
+
+  if [ "$db_type" = "mysql" ] && [ -f "${WGDASH}/src/db/wgdashboard.db" ]; then
+    echo "Detected SQLite database with MySQL config — running auto-migration..."
+
+    # Wait for MySQL to be ready
+    local retries=30
+    while [ $retries -gt 0 ]; do
+      ${WGDASH}/src/venv/bin/python3 -c "
+import pymysql
+pymysql.connect(host='${WG_DB_HOST:-127.0.0.1}', user='${WG_DB_USER:-wgdash}', password='${WG_DB_PASSWORD}', database='${WG_DB_TYPE:-wgdashboard}')
+" 2>/dev/null && break
+      retries=$((retries - 1))
+      echo "  Waiting for MySQL... ($retries attempts left)"
+      sleep 2
+    done
+
+    if [ $retries -eq 0 ]; then
+      echo "ERROR: Could not connect to MySQL. Falling back to SQLite."
+      set_ini Database type "sqlite"
+    else
+      # Run migration
+      ${WGDASH}/src/venv/bin/python3 "${WGDASH}/src/migrate_sqlite_to_mysql.py" && {
+        echo "  ✅ Migration successful! Renaming SQLite DB to .migrated"
+        mv "${WGDASH}/src/db/wgdashboard.db" "${WGDASH}/src/db/wgdashboard.db.migrated" 2>/dev/null
+        mv "${WGDASH}/src/db/wgdashboard_job.db" "${WGDASH}/src/db/wgdashboard_job.db.migrated" 2>/dev/null
+      } || {
+        echo "ERROR: Migration failed. Check logs."
+      }
+    fi
+  fi
+}
+
 set_envvars() {
   printf "\n------------- SETTING ENVIRONMENT VARIABLES ----------------\n"
 
@@ -270,5 +317,6 @@ start_and_monitor() {
 
 # Main execution flow
 ensure_installation
+set_database
 set_envvars
 start_and_monitor
