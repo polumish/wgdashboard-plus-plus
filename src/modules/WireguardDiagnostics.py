@@ -321,10 +321,8 @@ class DiagnosticsMonitor:
         names = {}
         try:
             for peer in config.Peers:
-                if hasattr(peer, 'name') and peer.name:
+                if hasattr(peer, 'name') and peer.name and len(peer.name.strip()) > 0:
                     names[peer.id] = peer.name
-                elif hasattr(peer, 'DNS') and peer.DNS:
-                    names[peer.id] = peer.DNS
         except Exception:
             pass
         return names
