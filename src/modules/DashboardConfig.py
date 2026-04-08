@@ -16,7 +16,7 @@ from .DashboardAPIKey import DashboardAPIKey
 
 
 class DashboardConfig:
-    DashboardVersion = 'v1.5.1'
+    DashboardVersion = 'v1.5.2'
     ConfigurationPath = os.getenv('CONFIGURATION_PATH', '.')
     ConfigurationFilePath = os.path.join(ConfigurationPath, 'wg-dashboard.ini')
     

@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-    <a href="https://github.com/polumish/wgdashboard-plus-plus/releases"><img src="https://img.shields.io/badge/Release_Notes-v1.5.1-brightgreen?style=for-the-badge"></a>
+    <a href="https://github.com/polumish/wgdashboard-plus-plus/releases"><img src="https://img.shields.io/badge/Release_Notes-v1.5.2-brightgreen?style=for-the-badge"></a>
     <a href="https://github.com/polumish/wgdashboard-plus-plus/discussions"><img src="https://img.shields.io/badge/Discussions-welcome-purple?style=for-the-badge&logo=github"></a>
     <a href="https://git.half.net.ua/polumish/wgdashboard-plus-plus/-/issues"><img src="https://img.shields.io/badge/Bug_Reports-welcome-orange?style=for-the-badge&logo=gitlab"></a>
 </p>
@@ -85,11 +85,21 @@ Fit more peers on screen with tight spacing.
 - **Peer counts in sidebar** — connected/total counts next to each configuration
 - **Configurable admin session timeout**
 
+### Network Diagnostics (v1.5.2+)
+- **Live diagnostic terminal** — neon-styled real-time view of WireGuard interface health
+- **SSE-powered** — Server-Sent Events push updates instantly when state changes (no polling)
+- **Per-interface diagnostics** — peers, endpoints, handshakes, transfer, system routes in one panel
+- **Route validation** — cross-references AllowedIPs with kernel routing table, detects mismatches
+- **Automatic warnings** — offline peers (handshake > 2min), missing routes, orphan routes, inactive peers with routes
+- **Settings tab** — unified view of all WG interfaces in Settings → Network Diagnostics
+- **Collapsible panel redesign** — replaces old stat cards and charts with compact diagnostic terminal
+- **Neon visual style** — dark semi-transparent background, color-coded status indicators with subtle glow, pulsing animations
+
 ### UI Improvements
 - **Display density settings** — Compact / Normal / Comfortable (Gmail-style)
 - **Dual-column Table view** — split peer list into two side-by-side tables (Total Commander style)
 - **Zebra striping** — alternating row backgrounds on sidebar, config list, and peer tables
-- **Collapsible configuration info panel** — hide/show Address, Listen Port, Public Key details
+- **Collapsible configuration info panel** — slim info bar replaces large cards, diagnostic terminal below
 - **Narrower adaptive sidebar** — width adapts to longest configuration name (180-260px)
 - **Sorting** — sort peers by status, name, or traffic in table view
 
@@ -106,7 +116,7 @@ WgDashboard++ uses its own versioning independent of upstream:
 - **Y** — feature releases (+0.1)
 - **Z** — bugfixes (+0.01)
 
-Current: **v1.5.1**
+Current: **v1.5.2**
 
 ## Feature Status
 
@@ -118,6 +128,7 @@ Current: **v1.5.1**
 | OPNsense Gateway integration | Stable |
 | Gateways aggregation view | Stable |
 | Routed LAN Subnets / policy routing | Stable |
+| Network Diagnostics (live SSE terminal) | Stable |
 | Docker deployment | Stable |
 
 ## Quick Start
