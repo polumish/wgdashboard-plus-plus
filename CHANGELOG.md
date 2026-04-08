@@ -5,6 +5,14 @@ All notable changes to WgDashboard++ will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to a custom versioning scheme: **X.YZ** where X=major, Y=feature (+0.1), Z=bugfix (+0.01).
 
+## [v1.5.1] - 2026-04-08
+
+### Fixed
+- **BackupScheduler not starting** — scheduler thread was created in gunicorn master process but not in the worker process. Auto-backups and scheduled backups were silently not running. Now starts via `startThreads()` in `post_worker_init`
+- **Migration script missing `wgdashboard_log` database** — third database needed by the dashboard was not created during migration, causing startup failure
+- **Old SQLite backups not restorable on MariaDB** — added `convert_old_backups.py` to convert `.db` files to MySQL `.sql` format, preserving transfer history
+- **Backup uses `mysqldump`** — global snapshots now use `mysqldump --single-transaction` instead of `sqlite3.backup()`. Full database dump/restore works natively with MariaDB
+
 ## [v1.5] - 2026-04-08
 
 ### BREAKING CHANGE: MariaDB required
