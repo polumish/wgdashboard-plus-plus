@@ -101,3 +101,80 @@ class TestDiagnosticsCollector:
 
         assert iface_data is None
         assert peers == []
+
+    def test_collect_routes(self):
+        """Collect system routes for a WG interface from ip route."""
+        from modules.WireguardDiagnostics import DiagnosticsCollector
+
+        ip_route_output = (
+            "10.200.0.0/24 dev wg0 proto kernel scope link src 10.200.0.1\n"
+            "192.168.1.0/24 via 10.200.0.2 dev wg0 metric 100\n"
+            "172.16.0.0/16 via 10.200.0.3 dev wg0 metric 100\n"
+        )
+
+        with patch("subprocess.check_output", return_value=ip_route_output.encode("utf-8")):
+            collector = DiagnosticsCollector()
+            routes = collector.collect_routes("wg0")
+
+        assert len(routes) == 3
+        assert routes[0]["destination"] == "10.200.0.0/24"
+        assert routes[0]["gateway"] == "kernel"
+        assert routes[1]["destination"] == "192.168.1.0/24"
+        assert routes[1]["gateway"] == "10.200.0.2"
+        assert routes[1]["metric"] == 100
+
+    def test_cross_reference_routes_with_peers(self):
+        """Match routes to peers via gateway IP in AllowedIPs, detect warnings."""
+        from modules.WireguardDiagnostics import DiagnosticsCollector
+
+        peers = [
+            {
+                "publicKey": "A=", "name": "office-gw",
+                "endpoint": "85.10.42.1:51820",
+                "allowedIps": ["10.200.0.2/32", "192.168.1.0/24"],
+                "status": "online",
+            },
+            {
+                "publicKey": "B=", "name": "backup-srv",
+                "endpoint": None,
+                "allowedIps": ["10.200.0.6/32", "10.0.99.0/24"],
+                "status": "inactive",
+            },
+        ]
+        routes = [
+            {"destination": "10.200.0.0/24", "gateway": "kernel", "metric": 0},
+            {"destination": "192.168.1.0/24", "gateway": "10.200.0.2", "metric": 100},
+            {"destination": "10.0.99.0/24", "gateway": "10.200.0.6", "metric": 100},
+        ]
+
+        collector = DiagnosticsCollector()
+        annotated, warnings = collector.cross_reference(routes, peers, "10.200.0.0/24")
+
+        assert annotated[0]["statusText"] == "interface subnet"
+        assert annotated[1]["peer"] == "office-gw"
+        assert annotated[1]["statusText"] == "AllowedIPs match"
+        assert annotated[2]["peer"] == "backup-srv"
+        assert "peer inactive" in annotated[2]["statusText"]
+        assert any("backup-srv" in w["message"] for w in warnings)
+
+    def test_cross_reference_missing_route(self):
+        """AllowedIPs entry without corresponding system route generates warning."""
+        from modules.WireguardDiagnostics import DiagnosticsCollector
+
+        peers = [
+            {
+                "publicKey": "A=", "name": "gw",
+                "allowedIps": ["10.200.0.2/32", "192.168.5.0/24"],
+                "status": "online",
+            },
+        ]
+        routes = [
+            {"destination": "10.200.0.0/24", "gateway": "kernel", "metric": 0},
+        ]
+
+        collector = DiagnosticsCollector()
+        annotated, warnings = collector.cross_reference(routes, peers, "10.200.0.0/24")
+
+        missing = [w for w in warnings if w["type"] == "missing_route"]
+        assert len(missing) == 1
+        assert "192.168.5.0/24" in missing[0]["message"]
