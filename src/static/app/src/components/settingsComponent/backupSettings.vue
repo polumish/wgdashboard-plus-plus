@@ -134,6 +134,12 @@ const selectedDayBackups = computed(() => {
 
 const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+const lastRestoredDay = computed(() => {
+    if (!lastRestoredName.value) return null;
+    const b = backups.value.find(x => x.name === lastRestoredName.value);
+    return b ? dayjs(b.date).format("YYYY-MM-DD") : null;
+});
+
 // ─── Methods ──────────────────────────────────────────────────────────────────
 
 function loadBackups() {
@@ -616,7 +622,13 @@ onMounted(() => {
                                              backupsByDay[day.format('YYYY-MM-DD')]?.length ? '' : ''
                                          ]"
                                          @click="calendarDayClick(day)">
-                                        <div class="py-1" :style="{ fontSize: 'var(--density-font-sm, 0.75rem)' }">{{ day.date() }}</div>
+                                        <div class="py-1 position-relative" :style="{ fontSize: 'var(--density-font-sm, 0.75rem)' }">
+                                            {{ day.date() }}
+                                            <span v-if="lastRestoredDay === day.format('YYYY-MM-DD')"
+                                                  class="position-absolute rounded-circle bg-success"
+                                                  style="width:6px;height:6px;top:2px;right:2px"
+                                                  title="Last restored"></span>
+                                        </div>
                                         <!-- Dots -->
                                         <div class="d-flex justify-content-center gap-1 pb-1 flex-wrap">
                                             <span v-for="b in (backupsByDay[day.format('YYYY-MM-DD')] || []).slice(0,4)"
