@@ -6,12 +6,11 @@ import ProtocolBadge from "@/components/protocolBadge.vue";
 import LocaleText from "@/components/text/localeText.vue";
 import {DashboardConfigurationStore} from "@/stores/DashboardConfigurationStore.js";
 import {WireguardConfigurationsStore} from "@/stores/WireguardConfigurationsStore.js";
-import PeerDataUsageCharts from "@/components/configurationComponents/peerListComponents/peerDataUsageCharts.vue";
+import NetworkDiagnostics from "@/components/networkDiagnostics/NetworkDiagnostics.vue";
 import PeerSearch from "@/components/configurationComponents/peerSearch.vue";
 import Peer from "@/components/configurationComponents/peer.vue";
 import PeerListModals from "@/components/configurationComponents/peerListComponents/peerListModals.vue";
 import PeerIntersectionObserver from "@/components/configurationComponents/peerIntersectionObserver.vue";
-import ConfigurationDescription from "@/components/configurationComponents/configurationDescription.vue";
 import PeerDetailsModal from "@/components/configurationComponents/peerDetailsModal.vue";
 import {parseCidr} from "cidr-tools";
 
@@ -431,91 +430,7 @@ watch(() => route.query.id, (newValue) => {
 		</div>
 		<Transition name="fade2">
 			<div v-if="configInfoExpanded" class="border-top">
-				<div class="px-3 pt-2">
-					<ConfigurationDescription :configuration="configurationInfo"></ConfigurationDescription>
-				</div>
-				<div class="row mt-3 gy-2 gx-2 mb-2 px-3">
-					<div class="col-12 col-lg-3">
-						<div class="card rounded-3 bg-transparent  h-100">
-							<div class="card-body py-2 d-flex flex-column">
-								<p class="mb-0 text-muted"><small>
-									<LocaleText t="Address"></LocaleText>
-								</small></p>
-								{{configurationInfo.Address}}
-							</div>
-						</div>
-					</div>
-					<div class="col-12 col-lg-3">
-						<div class="card rounded-3 bg-transparent h-100">
-							<div class="card-body py-2 d-flex flex-column">
-								<p class="mb-0 text-muted"><small>
-									<LocaleText t="Listen Port"></LocaleText>
-								</small></p>
-								{{configurationInfo.ListenPort}}
-							</div>
-						</div>
-					</div>
-					<div style="word-break: break-all" class="col-12 col-lg-6">
-						<div class="card rounded-3 bg-transparent h-100">
-							<div class="card-body py-2 d-flex flex-column">
-								<p class="mb-0 text-muted"><small>
-									<LocaleText t="Public Key"></LocaleText>
-								</small></p>
-								<samp>{{configurationInfo.PublicKey}}</samp>
-							</div>
-						</div>
-					</div>
-				</div>
-				<div class="row gx-2 gy-2 mb-2 px-3">
-					<div class="col-12 col-lg-3">
-						<div class="card rounded-3 bg-transparent h-100">
-							<div class="card-body d-flex">
-								<div>
-									<p class="mb-0 text-muted"><small><LocaleText t="Connected Peers"></LocaleText></small></p>
-									<strong class="h4">{{configurationSummary.connectedPeers}} / {{configurationPeers.length}}</strong>
-								</div>
-								<i class="bi bi-ethernet ms-auto h2 text-muted"></i>
-							</div>
-						</div>
-					</div>
-					<div class="col-12 col-lg-3">
-						<div class="card rounded-3 bg-transparent h-100">
-							<div class="card-body d-flex">
-								<div>
-									<p class="mb-0 text-muted"><small><LocaleText t="Total Usage"></LocaleText></small></p>
-									<strong class="h4">{{configurationSummary.totalUsage}} GB</strong>
-								</div>
-								<i class="bi bi-arrow-down-up ms-auto h2 text-muted"></i>
-							</div>
-						</div>
-					</div>
-					<div class="col-12 col-lg-3">
-						<div class="card rounded-3 bg-transparent h-100">
-							<div class="card-body d-flex">
-								<div>
-									<p class="mb-0 text-muted"><small><LocaleText t="Total Received"></LocaleText></small></p>
-									<strong class="h4 text-primary">{{configurationSummary.totalReceive}} GB</strong>
-								</div>
-								<i class="bi bi-arrow-down ms-auto h2 text-muted"></i>
-							</div>
-						</div>
-					</div>
-					<div class="col-12 col-lg-3">
-						<div class="card rounded-3 bg-transparent h-100">
-							<div class="card-body d-flex">
-								<div>
-									<p class="mb-0 text-muted"><small><LocaleText t="Total Sent"></LocaleText></small></p>
-									<strong class="h4 text-success">{{configurationSummary.totalSent}} GB</strong>
-								</div>
-								<i class="bi bi-arrow-up ms-auto h2 text-muted"></i>
-							</div>
-						</div>
-					</div>
-				</div>
-				<PeerDataUsageCharts
-					:configurationPeers="configurationPeers"
-					:configurationInfo="configurationInfo"
-				></PeerDataUsageCharts>
+				<NetworkDiagnostics mode="single" :interface="configurationInfo.Name" />
 			</div>
 		</Transition>
 	</div>
