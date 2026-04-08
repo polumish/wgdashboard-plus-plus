@@ -182,8 +182,17 @@ else:
     print('  ℹ️  No job database found, skipping')
 PYEOF
 
+# ── Step 4b: Convert old SQLite backups to MySQL format ──────────────────────
+echo "[4b/7] Converting old SQLite backups to MySQL format..."
+if [ -f "$SCRIPT_DIR/convert_old_backups.py" ]; then
+    $VENV_PYTHON "$SCRIPT_DIR/convert_old_backups.py"
+    echo "  ✅ Old backups converted"
+else
+    echo "  ⏭️  Conversion script not found, skipping"
+fi
+
 # ── Step 5: Update wg-dashboard.ini ──────────────────────────────────────────
-echo "[5/6] Updating wg-dashboard.ini..."
+echo "[5/7] Updating wg-dashboard.ini..."
 cp "$INI_FILE" "${INI_FILE}.pre-mariadb.bak"
 
 # Update Database section
@@ -195,7 +204,7 @@ sed -i "/^\[Database\]/,/^\[/{s/^password = .*/password = $DB_PASSWORD/}" "$INI_
 echo "  ✅ Config updated (backup: ${INI_FILE}.pre-mariadb.bak)"
 
 # ── Step 6: Restart dashboard only (WG interfaces stay UP) ───────────────────
-echo "[6/6] Restarting dashboard (WireGuard interfaces stay running)..."
+echo "[6/7] Restarting dashboard (WireGuard interfaces stay running)..."
 ./wgd.sh restart 2>&1 | grep -E 'started|stopped|error' || true
 
 echo ""
