@@ -142,6 +142,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { getUrl } from '@/utilities/fetch.js';
+import { DashboardConfigurationStore } from '@/stores/DashboardConfigurationStore.js';
 
 const props = defineProps({
   mode: { type: String, default: 'all' },
@@ -222,10 +223,18 @@ function statusTextClass(status) {
 }
 
 function connectSSE() {
-  const params = props.mode === 'single' && props.interface
-    ? `?interface=${props.interface}`
-    : '';
-  const url = getUrl(`/api/sse/diagnostics${params}`);
+  const searchParams = new URLSearchParams();
+  if (props.mode === 'single' && props.interface) {
+    searchParams.set('interface', props.interface);
+  }
+  // For cross-server mode, pass API key as query param since EventSource can't set headers
+  const store = DashboardConfigurationStore();
+  const crossServer = store.getActiveCrossServer();
+  if (crossServer) {
+    searchParams.set('apikey', crossServer.apiKey);
+  }
+  const paramStr = searchParams.toString();
+  const url = getUrl(`/api/sse/diagnostics${paramStr ? '?' + paramStr : ''}`);
 
   eventSource = new EventSource(url);
 
