@@ -31,6 +31,7 @@ const backupsLoading = ref(false);
 const storageExpanded = ref(false);
 const activeFilter = ref("all");
 const viewMode = ref("table"); // "table" | "calendar"
+const lastRestoredName = ref(localStorage.getItem("wgdash_last_restored") || "");
 
 // Calendar state
 const calendarDate = ref(dayjs());
@@ -205,17 +206,22 @@ function toggleAllRestore() {
     Object.keys(restoreComponents.value).forEach(k => (restoreComponents.value[k] = newVal));
 }
 
+const restoring = ref(false)
+
 function doRestore() {
-    if (!restoreTarget.value) return;
+    if (!restoreTarget.value || restoring.value) return;
+    restoring.value = true;
+    const snapshotName = restoreTarget.value.name;
+    localStorage.setItem("wgdash_last_restored", snapshotName);
     const components = Object.entries(restoreComponents.value)
         .filter(([, v]) => v)
         .map(([k]) => k);
-    fetchPost("/api/backup/global/restore", { name: restoreTarget.value.name, components }, (res) => {
-        if (res && res.status) {
-            // Full page reload — restore replaces DB (invalidates session) and WG configs
-            window.location.reload();
-        }
+    fetchPost("/api/backup/global/restore", { name: snapshotName, components }, () => {
+        // Reload regardless of response — DB is replaced, session invalidated
+        window.location.reload();
     });
+    // Safety: if fetchPost never calls back (timeout), reload after 15 seconds
+    setTimeout(() => { window.location.reload(); }, 15000);
 }
 
 function typeBadgeClass(type) {
@@ -485,6 +491,7 @@ onMounted(() => {
                             <tbody>
                                 <tr v-for="b in filteredBackups" :key="b.name">
                                     <td class="ps-3">
+                                        <span v-if="b.name === lastRestoredName" class="badge rounded-circle bg-success me-1 p-1" title="Last restored" style="width:8px;height:8px;display:inline-block"></span>
                                         <samp style="font-size: 0.8em">{{ b.name }}</samp>
                                     </td>
                                     <td class="text-body-secondary">{{ formatDate(b.date) }}</td>
@@ -573,6 +580,7 @@ onMounted(() => {
                                             <span class="badge rounded-pill border" :class="typeBadgeClass(b.type)" :style="{ fontSize: 'var(--density-font-sm, 0.7rem)' }">
                                                 {{ b.type || 'manual' }}
                                             </span>
+                                            <span v-if="b.name === lastRestoredName" class="badge rounded-circle bg-success p-1" title="Last restored" style="width:8px;height:8px;display:inline-block;flex-shrink:0"></span>
                                             <samp style="font-size:0.8em; flex:1" class="text-truncate">{{ b.name }}</samp>
                                             <span class="text-body-secondary" :style="{ fontSize: 'var(--density-font-sm, 0.75rem)' }">{{ formatSize(b.size) }}</span>
                                             <div class="btn-group btn-group-sm">
@@ -737,10 +745,11 @@ onMounted(() => {
                             <button type="button" class="btn btn-sm btn-outline-secondary rounded-3" @click="closeRestoreModal">
                                 <LocaleText t="Cancel"></LocaleText>
                             </button>
-                            <button type="button" class="btn btn-sm btn-primary rounded-3" @click="doRestore" :disabled="restoreSelectedCount === 0">
-                                <i class="bi bi-arrow-counterclockwise me-1"></i>
-                                <LocaleText t="Restore Selected"></LocaleText>
-                                ({{ restoreSelectedCount }})
+                            <button type="button" class="btn btn-sm btn-primary rounded-3" @click="doRestore" :disabled="restoreSelectedCount === 0 || restoring">
+                                <span v-if="restoring" class="spinner-border spinner-border-sm me-1"></span>
+                                <i v-else class="bi bi-arrow-counterclockwise me-1"></i>
+                                <template v-if="restoring"><LocaleText t="Restoring..."></LocaleText></template>
+                                <template v-else><LocaleText t="Restore Selected"></LocaleText> ({{ restoreSelectedCount }})</template>
                             </button>
                         </div>
                     </div>
