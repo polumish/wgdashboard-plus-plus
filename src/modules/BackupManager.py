@@ -118,18 +118,18 @@ class BackupManager:
                         os.path.join(settings_dir, "wg-dashboard.ini"),
                     )
 
-                # 3. DB export
+                # 3. DB export — lightweight JSON only (no transfer history)
                 db_dir = os.path.join(snap_dir, "db")
                 os.makedirs(db_dir, exist_ok=True)
 
-                # 3a. Full DB dump — non-blocking, includes ALL data
-                db_type = self._get_db_type()
-                dump_ext = ".sql" if db_type == "mysql" else ".db"
-                db_copy_path = os.path.join(db_dir, f"wgdashboard{dump_ext}")
-                self._full_db_backup(db_copy_path)
-
-                # 3b. Lightweight JSON export (without transfer/history) — for granular restore
                 all_data = self._export_database(skip_heavy=True)
+
+                # Update shared transfer dump (one copy for all snapshots)
+                try:
+                    transfer_dump_path = os.path.join(self.backup_path, "transfer_dump.sql")
+                    self._dump_transfer_tables(transfer_dump_path)
+                except Exception:
+                    pass
 
                 peers_data = {
                     k: v for k, v in all_data.items()
@@ -236,6 +236,9 @@ class BackupManager:
         details["has_full_db"] = (
             os.path.isfile(os.path.join(snap_dir, "db", "wgdashboard.sql"))
             or os.path.isfile(os.path.join(snap_dir, "db", "wgdashboard.db"))
+        )
+        details["has_shared_transfer"] = os.path.isfile(
+            os.path.join(self.backup_path, "transfer_dump.sql")
         )
 
         # 5. Settings
@@ -494,7 +497,7 @@ class BackupManager:
 
             # 4. Database restore (alongside configurations)
             if "configurations" in components:
-                # Prefer full dump restore (includes transfer/history)
+                # Check for legacy full dump files first
                 db_sql = os.path.join(snap_dir, "db", "wgdashboard.sql")
                 db_sqlite = os.path.join(snap_dir, "db", "wgdashboard.db")
                 if os.path.isfile(db_sql):
@@ -759,6 +762,48 @@ class BackupManager:
             if os.path.isfile(candidate):
                 return candidate
         return None
+
+    def _dump_transfer_tables(self, dest_path: str) -> bool:
+        """Dump only transfer and history_endpoint tables to a shared SQL file.
+
+        This is kept as one copy for all snapshots since transfer data is
+        append-only — each new dump contains all previous data.
+        """
+        import subprocess
+        db_type = self._get_db_type()
+
+        if db_type == "mysql":
+            creds = self._get_mysql_credentials()
+            # Get transfer/history table names
+            try:
+                with self.db_engine.connect() as conn:
+                    result = conn.execute(text(
+                        "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES "
+                        f"WHERE TABLE_SCHEMA = '{creds['database']}' "
+                        "AND (TABLE_NAME LIKE '%_transfer' OR TABLE_NAME LIKE '%_history_endpoint')"
+                    ))
+                    tables = [row[0] for row in result]
+            except Exception:
+                return False
+
+            if not tables:
+                return False
+
+            cmd = [
+                "mysqldump",
+                f"--host={creds['host']}",
+                f"--port={creds['port']}",
+                f"--user={creds['user']}",
+                f"--password={creds['password']}",
+                "--single-transaction",
+                creds["database"],
+            ] + tables
+
+            with open(dest_path, "w") as f:
+                result = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE, timeout=120)
+            return result.returncode == 0
+
+        return False
 
     def _get_db_type(self) -> str:
         """Return 'mysql', 'postgresql', or 'sqlite' based on engine URL."""
