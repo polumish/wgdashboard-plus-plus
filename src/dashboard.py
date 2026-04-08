@@ -180,7 +180,10 @@ def startThreads():
     if AllBackupScheduler is not None:
         AllBackupScheduler.start()
         app.logger.info("Background Thread #3 (BackupScheduler) Started")
-    AllDiagnosticsMonitor.start(lambda: WireguardConfigurations, app.logger)
+    AllDiagnosticsMonitor.start(
+        lambda: WireguardConfigurations, app.logger,
+        lambda: int(DashboardConfig.GetConfig("Server", "peer_handshake_threshold")[1])
+    )
 
 AllBackupManager: BackupManager = None
 AllBackupScheduler: BackupScheduler = None

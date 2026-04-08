@@ -41,7 +41,7 @@ class DiagnosticsCollector:
             "fwmark": fwmark,
         }
 
-    def collect_peers(self, interface: str, protocol: str = "wg") -> tuple[dict | None, list]:
+    def collect_peers(self, interface: str, protocol: str = "wg", threshold: int = 300) -> tuple[dict | None, list]:
         """Collect peer data from `wg show <iface>`. Returns (interface_data, peers_list)."""
         try:
             output = subprocess.check_output(
@@ -84,7 +84,7 @@ class DiagnosticsCollector:
             elif current_peer and line.startswith("latest handshake:"):
                 handshake_str = line.split(": ", 1)[1]
                 current_peer["latestHandshake"] = handshake_str
-                current_peer["status"] = self._handshake_to_status(handshake_str)
+                current_peer["status"] = self._handshake_to_status(handshake_str, threshold)
             elif current_peer and line.startswith("transfer:"):
                 parts = line.split(": ", 1)[1]
                 rx_match = re.match(r"([\d.]+)\s+(\S+)\s+received", parts)
@@ -104,7 +104,7 @@ class DiagnosticsCollector:
         return iface_data, peers
 
     @staticmethod
-    def _handshake_to_status(handshake_str: str) -> str:
+    def _handshake_to_status(handshake_str: str, threshold: int = 300) -> str:
         """Determine peer status from handshake string."""
         if not handshake_str or handshake_str == "No Handshake":
             return "inactive"
@@ -120,7 +120,7 @@ class DiagnosticsCollector:
             seconds = value * 3600
         elif unit == "day":
             seconds = value * 86400
-        return "online" if seconds < 120 else "offline"
+        return "online" if seconds < threshold else "offline"
 
     @staticmethod
     def _parse_transfer(value: float, unit: str) -> int:
@@ -239,7 +239,7 @@ class DiagnosticsCollector:
 
         return annotated, warnings
 
-    def build_snapshot(self, interface: str, protocol: str = "wg", peer_names: dict = None) -> dict | None:
+    def build_snapshot(self, interface: str, protocol: str = "wg", peer_names: dict = None, threshold: int = 300) -> dict | None:
         """Build complete diagnostics snapshot for one interface."""
         if peer_names is None:
             peer_names = {}
@@ -248,7 +248,7 @@ class DiagnosticsCollector:
         if info is None:
             return None
 
-        iface_data, peers = self.collect_peers(interface, protocol)
+        iface_data, peers = self.collect_peers(interface, protocol, threshold)
         if iface_data is None:
             iface_data = {}
 
@@ -267,7 +267,7 @@ class DiagnosticsCollector:
                 warnings.append({
                     "type": "peer_offline",
                     "target": peer["name"],
-                    "message": f"{peer['name']} — last handshake: {peer['latestHandshake']} (threshold: 2m)",
+                    "message": f"{peer['name']} — last handshake: {peer['latestHandshake']} (threshold: {threshold // 60}m)",
                 })
 
         return {
@@ -307,10 +307,11 @@ class DiagnosticsMonitor:
         with self._lock:
             self._subscribers = [(sq, f) for sq, f in self._subscribers if sq is not q]
 
-    def start(self, get_configurations, app_logger):
+    def start(self, get_configurations, app_logger, get_threshold=None):
         """Start the background monitor thread."""
         self._get_configurations = get_configurations
         self._logger = app_logger
+        self._get_threshold = get_threshold
         self._running = True
         thread = threading.Thread(target=self._monitor_loop, daemon=True)
         thread.start()
@@ -335,10 +336,12 @@ class DiagnosticsMonitor:
                 configurations = self._get_configurations()
                 full_snapshot = {}
 
+                threshold = self._get_threshold() if self._get_threshold else 300
+
                 for name, config in configurations.items():
                     protocol = getattr(config, 'Protocol', 'wg')
                     peer_names = self._get_peer_names(config)
-                    snapshot = self._collector.build_snapshot(name, protocol, peer_names)
+                    snapshot = self._collector.build_snapshot(name, protocol, peer_names, threshold)
                     if snapshot:
                         full_snapshot[name] = snapshot
 

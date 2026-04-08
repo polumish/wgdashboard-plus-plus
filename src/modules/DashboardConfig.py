@@ -50,7 +50,8 @@ class DashboardConfig:
                 "dashboard_api_key": "false",
                 "dashboard_language": "en-US",
                 "gitlab_api_token": "",
-                "gitlab_project_url": "https://git.half.net.ua/api/v4/projects/49"
+                "gitlab_project_url": "https://git.half.net.ua/api/v4/projects/49",
+                "peer_handshake_threshold": "300"
             },
             "Peers": {
                 "peer_global_DNS": "1.1.1.1",
