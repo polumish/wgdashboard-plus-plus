@@ -376,21 +376,24 @@ class BackupManager:
                     shutil.copy2(ini_backup, self.ini_path)
                 restored.append("dashboard_settings")
 
-            # 2. Configuration files
+            # 2. Configuration files — replace ALL configs (remove those not in backup)
             if "configurations" in components:
                 configs_dir = os.path.join(snap_dir, "configs")
                 if os.path.isdir(configs_dir):
-                    for fname in os.listdir(configs_dir):
+                    backup_confs = set(os.listdir(configs_dir))
+                    # Remove current .conf files not present in backup
+                    for conf_dir in [self.wg_conf_path, self.awg_conf_path]:
+                        if not conf_dir or not os.path.isdir(conf_dir):
+                            continue
+                        for fname in os.listdir(conf_dir):
+                            if fname.endswith(".conf") and fname not in backup_confs:
+                                os.remove(os.path.join(conf_dir, fname))
+                    # Copy backup configs
+                    for fname in backup_confs:
                         if not fname.endswith(".conf"):
                             continue
                         src = os.path.join(configs_dir, fname)
-                        # Determine destination: wg or awg directory
-                        awg_candidate = os.path.join(self.awg_conf_path, fname)
-                        wg_candidate = os.path.join(self.wg_conf_path, fname)
-                        if os.path.isfile(awg_candidate):
-                            dest = awg_candidate
-                        else:
-                            dest = wg_candidate
+                        dest = os.path.join(self.wg_conf_path, fname)
                         shutil.copy2(src, dest)
                 restored.append("configurations")
 
@@ -425,28 +428,44 @@ class BackupManager:
                                     warnings.append(f"Failed to restore table {table}: {str(e)}")
                             restored.append(comp)
 
-            # 4. Peers DB (restored alongside configurations)
+            # 4. Database restore (alongside configurations)
             if "configurations" in components:
-                peers_json = os.path.join(snap_dir, "db", "peers.json")
-                if os.path.isfile(peers_json):
-                    with open(peers_json) as f:
-                        peers_data = json.load(f)
-                    with self.db_engine.begin() as conn:
-                        for table, rows in peers_data.items():
-                            if not self._is_valid_table_name(table):
-                                continue
+                # Prefer full .db file restore (exact copy, includes transfer/history)
+                db_backup = os.path.join(snap_dir, "db", "wgdashboard.db")
+                if os.path.isfile(db_backup):
+                    self._sqlite_restore(db_backup)
+                    restored.append("full_database")
+                else:
+                    # Fallback: JSON-based restore (older snapshots without .db file)
+                    # Must drop ALL peer tables first, then insert only what's in backup
+                    peers_json = os.path.join(snap_dir, "db", "peers.json")
+                    if os.path.isfile(peers_json):
+                        with open(peers_json) as f:
+                            peers_data = json.load(f)
+                        with self.db_engine.begin() as conn:
+                            # Drop all existing per-config tables
                             try:
-                                conn.execute(text(f'DELETE FROM "{table}"'))
-                                if rows:
-                                    cols = list(rows[0].keys())
-                                    col_names = ", ".join(f'"{c}"' for c in cols)
-                                    col_params = ", ".join(f":col_{c}" for c in cols)
-                                    conn.execute(
-                                        text(f'INSERT INTO "{table}" ({col_names}) VALUES ({col_params})'),
-                                        [{f"col_{k}": v for k, v in row.items()} for row in rows],
-                                    )
-                            except Exception as e:  # noqa: BLE001
-                                warnings.append(f"Failed to restore table {table}: {str(e)}")
+                                inspector = inspect(self.db_engine)
+                                for tbl in inspector.get_table_names():
+                                    if tbl not in DASHBOARD_TABLES and self._is_valid_table_name(tbl):
+                                        conn.execute(text(f'DELETE FROM "{tbl}"'))
+                            except Exception:
+                                pass
+                            # Insert backup data
+                            for table, rows in peers_data.items():
+                                if not self._is_valid_table_name(table):
+                                    continue
+                                try:
+                                    if rows:
+                                        cols = list(rows[0].keys())
+                                        col_names = ", ".join(f'"{c}"' for c in cols)
+                                        col_params = ", ".join(f":col_{c}" for c in cols)
+                                        conn.execute(
+                                            text(f'INSERT INTO "{table}" ({col_names}) VALUES ({col_params})'),
+                                            [{f"col_{k}": v for k, v in row.items()} for row in rows],
+                                        )
+                                except Exception as e:  # noqa: BLE001
+                                    warnings.append(f"Failed to restore table {table}: {str(e)}")
 
         return {"status": True, "restored": restored, "warnings": warnings}
 
@@ -692,6 +711,32 @@ class BackupManager:
 
             src_conn = sqlite3.connect(db_path)
             dst_conn = sqlite3.connect(dest_path)
+            src_conn.backup(dst_conn)
+            dst_conn.close()
+            src_conn.close()
+            return True
+        except Exception:
+            return False
+
+    def _sqlite_restore(self, src_path: str) -> bool:
+        """Restore the SQLite database from a backup .db file.
+
+        Replaces the live database file with the backup copy.
+        The SQLAlchemy engine will pick up the new data on next connection.
+        """
+        import sqlite3
+        try:
+            db_url = str(self.db_engine.url)
+            if "sqlite" not in db_url:
+                return False
+            db_path = db_url.split("///")[-1] if "///" in db_url else db_url.split("//")[-1]
+
+            # Dispose all connections so the file is not locked
+            self.db_engine.dispose()
+
+            # Use sqlite3.backup() in reverse — from backup file to live DB
+            src_conn = sqlite3.connect(src_path)
+            dst_conn = sqlite3.connect(db_path)
             src_conn.backup(dst_conn)
             dst_conn.close()
             src_conn.close()
