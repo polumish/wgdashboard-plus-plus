@@ -15,6 +15,7 @@
     <img src="https://img.shields.io/badge/Python-3670A0?style=for-the-badge&logo=python&logoColor=ffffff">
     <img src="https://img.shields.io/badge/Vue.js-42b883?style=for-the-badge&logo=vuedotjs&logoColor=ffffff">
     <img src="https://img.shields.io/badge/WireGuard-88171A?style=for-the-badge&logo=wireguard&logoColor=ffffff">
+    <img src="https://img.shields.io/badge/MariaDB-003545?style=for-the-badge&logo=mariadb&logoColor=ffffff">
     <img src="https://img.shields.io/badge/Self--Hosted-0B5FFF?style=for-the-badge">
 </p>
 
@@ -26,9 +27,11 @@
 
 ## About
 
-**WgDashboard++** is a fork of [WGDashboard](https://github.com/donaldzou/WGDashboard) v4.3.2 by **[Donald Zou](https://github.com/donaldzou)**, extended with additional features for client self-service peer management, improved admin UX, and integration with OPNsense firewalls.
+**WgDashboard++** is a fork of [WGDashboard](https://github.com/donaldzou/WGDashboard) v4.3.2 by **[Donald Zou](https://github.com/donaldzou)**, extended with backup & restore, MariaDB support, improved admin UX, and integration with OPNsense firewalls.
 
 All credit for the base dashboard goes to the original author. This fork focuses on operational needs for managing multiple WireGuard networks with many peers and external clients.
+
+> **v1.5+ requires MariaDB.** SQLite is no longer supported due to file-locking issues with concurrent operations. See [Migration Guide](docs/MIGRATION.md).
 
 ## Screenshots
 
@@ -54,15 +57,31 @@ Fit more peers on screen with tight spacing.
 
 ## Changes vs Upstream
 
+### Backup & Restore (v1.4+)
+- **Global scheduled snapshots** — daily/weekly/monthly with configurable retention (GFS rotation)
+- **Per-config auto-backups** — automatic backup before any peer or config change
+- **Granular restore** — select individual components (configs, settings, webhooks, clients, API keys)
+- **Restore points** — automatic safety backup before every restore operation
+- **Calendar & Table views** — visual backup history with color-coded dots and filters
+- **Backup preview** — expandable tree showing configs, peer counts, dashboard components
+- **Full database dump** — `mysqldump --single-transaction` for non-blocking backups
+- **Progress bar** — real-time restore progress with stage descriptions
+
+### Database (v1.5+)
+- **MariaDB required** — eliminates SQLite file-locking issues that caused server freezes
+- **Auto-migration** — `migrate_to_mariadb.sh` script for bare-metal, automatic in Docker
+- **Docker Compose** — `docker/docker-compose.yml` with WGDashboard + MariaDB containers
+
 ### Client Features
 - **Client portal** for self-service peer management (add/delete/restrict/allow/download)
 - **Client config access management** — assign manager role per WG configuration
 - **Trusted IPs** — skip TOTP for admin and client from allowed networks
 
 ### Admin Features
-- **Backup & Restore** — two-level backup system with global scheduled snapshots (daily/weekly/monthly) and automatic per-config backups before any change. Granular restore with component-level selection. Calendar and table views. Restore points for undo safety. SHA-256 integrity verification. JSON format (cross-database compatible).
-- **OPNsense Gateway generator** ⚠️ **Alpha** — export WireGuard peer config as OPNsense XML. **Not recommended for production use.** Please report any issues you encounter while testing.
-- **Broadcast AllowedIPs** — propagate a peer's allowed IPs to all other peers in one click
+- **OPNsense Gateway integration** — manual setup panel matching OPNsense UI 1:1, auto port assignment, multi-network support
+- **Gateways aggregation view** — all gateway peers across configurations in one page
+- **Routed LAN Subnets** — server-side policy routing with one-click Apply
+- **Broadcast AllowedIPs** — propagate a peer's allowed IPs to all other peers
 - **Peer counts in sidebar** — connected/total counts next to each configuration
 - **Configurable admin session timeout**
 
@@ -75,10 +94,10 @@ Fit more peers on screen with tight spacing.
 - **Sorting** — sort peers by status, name, or traffic in table view
 
 ### Infrastructure
-- **GitLab CI/CD** — automated testing (43 tests) and deployment on push to main
+- **GitLab CI/CD** — automated testing and deployment on push to main
 - **GitHub mirror** — automatic sync from GitLab
+- **Docker** — published image on `ghcr.io/polumish/wgdashboard-plus-plus`
 - **Cache-Control headers** on HTML responses
-- **Custom versioning** — starts at `v1.0` with semantic scheme `X.YZ`
 
 ## Versioning
 
@@ -87,20 +106,55 @@ WgDashboard++ uses its own versioning independent of upstream:
 - **Y** — feature releases (+0.1)
 - **Z** — bugfixes (+0.01)
 
-Current: **v1.3**
+Current: **v1.5.1**
 
 ## Feature Status
 
 | Feature | Status |
 |---------|--------|
-| Client portal, trusted IPs, density, dual-column view | ✅ Stable |
-| OPNsense Gateway integration (v1.2) | ✅ Stable — Manual Setup 1:1 with OPNsense UI, auto port assignment, multi-network duplicate-peer mode |
-| Gateways aggregation view | ✅ Stable |
-| Routed LAN Subnets / Apply Now policy routing | ✅ Stable |
+| Backup & Restore (global + per-config) | Stable |
+| MariaDB database | Stable (required since v1.5) |
+| Client portal, trusted IPs, density, dual-column view | Stable |
+| OPNsense Gateway integration | Stable |
+| Gateways aggregation view | Stable |
+| Routed LAN Subnets / policy routing | Stable |
+| Docker deployment | Stable |
+
+## Quick Start
+
+### Bare-metal
+
+```bash
+# 1. Clone and install
+git clone https://github.com/polumish/wgdashboard-plus-plus.git /opt/WGDashboard
+cd /opt/WGDashboard/src
+chmod +x wgd.sh
+./wgd.sh install
+
+# 2. Migrate to MariaDB (required for v1.5+)
+sudo ./migrate_to_mariadb.sh --db-password YourStrongPassword
+
+# 3. Start
+./wgd.sh start
+```
+
+### Docker
+
+```bash
+cd docker
+# Edit docker-compose.yml — change passwords!
+docker compose up -d
+```
+
+See [`docker/docker-compose.yml`](docker/docker-compose.yml) for configuration options.
+
+## Migration from SQLite
+
+If upgrading from v1.4 or earlier, see the [Migration Guide](docs/MIGRATION.md) for step-by-step instructions.
 
 ## Deployment
 
-See [`DEPLOYMENT.md`](DEPLOYMENT.md) for installation, systemd service, nginx reverse proxy, and GitLab CI/CD auto-deploy setup.
+See [`DEPLOYMENT.md`](DEPLOYMENT.md) for systemd service, nginx reverse proxy, and CI/CD auto-deploy setup.
 
 ## License
 
