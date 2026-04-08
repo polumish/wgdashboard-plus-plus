@@ -1014,15 +1014,14 @@ def API_backup_settings_update():
 
 @app.route(f'{APP_PREFIX}/api/sse/diagnostics', methods=['GET'])
 def API_SSE_Diagnostics():
-    # Support API key via query param for EventSource (which can't set headers)
+    # Auth is handled by before_request (session or API key header).
+    # For cross-server EventSource (can't set headers), support API key as query param.
     apikey = request.args.get('apikey', None)
-    if apikey:
+    if apikey and not DashboardConfig.APIAccessed:
         apiKeyEnabled = DashboardConfig.GetConfig("Server", "dashboard_api_key")[1]
         apiKeyExist = apiKeyEnabled and len(list(filter(lambda x: x.Key == apikey, DashboardConfig.DashboardAPIKeys))) == 1
         if not apiKeyExist:
             return ResponseObject(False, "Invalid API key.", status_code=401)
-    elif not current_user:
-        return ResponseObject(False, "Invalid authentication.", status_code=401)
 
     interface = request.args.get('interface', None)
     interfaces_filter = [interface] if interface else None
