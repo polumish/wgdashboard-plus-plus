@@ -176,6 +176,9 @@ def startThreads():
     bgThread.start()
     scheduleJobThread = threading.Thread(target=peerJobScheduleBackgroundThread, daemon=True)
     scheduleJobThread.start()
+    if AllBackupScheduler is not None:
+        AllBackupScheduler.start()
+        app.logger.info("Background Thread #3 (BackupScheduler) Started")
 
 AllBackupManager: BackupManager = None
 AllBackupScheduler: BackupScheduler = None
