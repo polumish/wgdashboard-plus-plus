@@ -238,3 +238,47 @@ class DiagnosticsCollector:
                     })
 
         return annotated, warnings
+
+    def build_snapshot(self, interface: str, protocol: str = "wg", peer_names: dict = None) -> dict | None:
+        """Build complete diagnostics snapshot for one interface."""
+        if peer_names is None:
+            peer_names = {}
+
+        info = self.collect_interface_info(interface)
+        if info is None:
+            return None
+
+        iface_data, peers = self.collect_peers(interface, protocol)
+        if iface_data is None:
+            iface_data = {}
+
+        # Resolve peer names
+        for peer in peers:
+            peer["name"] = peer_names.get(peer["publicKey"], peer["publicKey"][:12] + "…")
+
+        routes = self.collect_routes(interface)
+        annotated_routes, warnings = self.cross_reference(
+            routes, peers, info.get("address", "")
+        )
+
+        # Add peer-level warnings (offline peers)
+        for peer in peers:
+            if peer["status"] == "offline":
+                warnings.append({
+                    "type": "peer_offline",
+                    "target": peer["name"],
+                    "message": f"{peer['name']} — last handshake: {peer['latestHandshake']} (threshold: 2m)",
+                })
+
+        return {
+            "status": info["status"],
+            "address": info["address"],
+            "mtu": info["mtu"],
+            "fwmark": iface_data.get("fwmark"),
+            "listenPort": iface_data.get("listenPort"),
+            "publicKey": iface_data.get("publicKey"),
+            "peers": peers,
+            "routes": annotated_routes,
+            "warnings": warnings,
+            "timestamp": int(time.time()),
+        }

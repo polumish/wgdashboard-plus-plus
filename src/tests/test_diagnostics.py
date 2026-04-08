@@ -1,4 +1,5 @@
 import pytest
+import subprocess
 from unittest.mock import patch, MagicMock
 import json
 
@@ -178,3 +179,58 @@ class TestDiagnosticsCollector:
         missing = [w for w in warnings if w["type"] == "missing_route"]
         assert len(missing) == 1
         assert "192.168.5.0/24" in missing[0]["message"]
+
+
+class TestDiagnosticsSnapshot:
+    """Tests for building a complete diagnostics snapshot."""
+
+    def test_build_snapshot_single_interface(self):
+        """Build complete snapshot for one interface, including peer name resolution."""
+        from modules.WireguardDiagnostics import DiagnosticsCollector
+
+        ip_addr_output = (
+            "4: wg0: <POINTOPOINT,NOARP,UP,LOWER_UP> mtu 1420 qdisc noqueue state UNKNOWN\n"
+            "    inet 10.200.0.1/24 scope global wg0\n"
+        )
+        wg_show_output = (
+            "interface: wg0\n"
+            "  public key: SrvKey=\n"
+            "  listening port: 65350\n"
+            "  fwmark: 0xca6c\n"
+            "\n"
+            "peer: PeerKeyA=\n"
+            "  endpoint: 85.10.42.1:51820\n"
+            "  allowed ips: 10.200.0.2/32, 192.168.1.0/24\n"
+            "  latest handshake: 12 seconds ago\n"
+            "  transfer: 25.16 MiB received, 1.05 GiB sent\n"
+        )
+        ip_route_output = (
+            "10.200.0.0/24 dev wg0 proto kernel scope link src 10.200.0.1\n"
+            "192.168.1.0/24 via 10.200.0.2 dev wg0 metric 100\n"
+        )
+
+        call_map = {
+            "ip address show wg0": ip_addr_output.encode("utf-8"),
+            "wg show wg0": wg_show_output.encode("utf-8"),
+            "ip route show dev wg0": ip_route_output.encode("utf-8"),
+        }
+
+        def mock_check_output(cmd, **kwargs):
+            for key, val in call_map.items():
+                if key in cmd:
+                    return val
+            raise subprocess.CalledProcessError(1, cmd)
+
+        peer_names = {"PeerKeyA=": "office-gw"}
+
+        with patch("subprocess.check_output", side_effect=mock_check_output):
+            collector = DiagnosticsCollector()
+            snapshot = collector.build_snapshot("wg0", protocol="wg", peer_names=peer_names)
+
+        assert snapshot["status"] == "up"
+        assert snapshot["listenPort"] == 65350
+        assert len(snapshot["peers"]) == 1
+        assert snapshot["peers"][0]["name"] == "office-gw"
+        assert snapshot["peers"][0]["status"] == "online"
+        assert len(snapshot["routes"]) == 2
+        assert snapshot["routes"][1]["peer"] == "office-gw"
