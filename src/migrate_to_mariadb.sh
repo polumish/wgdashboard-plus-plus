@@ -86,9 +86,11 @@ echo "[2/6] Creating database and user..."
 mariadb -e "
 CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS \`$DB_JOB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS \`${DB_NAME}_log\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';
 GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'localhost';
 GRANT ALL PRIVILEGES ON \`$DB_JOB_NAME\`.* TO '$DB_USER'@'localhost';
+GRANT ALL PRIVILEGES ON \`${DB_NAME}_log\`.* TO '$DB_USER'@'localhost';
 FLUSH PRIVILEGES;
 "
 echo "  ✅ Database '$DB_NAME' and user '$DB_USER' ready"
