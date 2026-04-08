@@ -54,9 +54,31 @@ class BackupScheduler:
         Returns the daemon thread so callers can join() if needed.
         """
         self._running = True
+        # Recover last scheduled times from existing backups to avoid duplicates after restart
+        self._recover_last_scheduled()
         t = threading.Thread(target=self._schedule_loop, daemon=True, name="BackupScheduler")
         t.start()
         return t
+
+    def _recover_last_scheduled(self) -> None:
+        """Read existing backups to find when each schedule type last ran.
+        Prevents creating duplicate backups after a dashboard restart."""
+        try:
+            snapshots = self.bm.getGlobalSnapshots()
+            trigger_map = {"daily": "scheduled_daily", "weekly": "scheduled_weekly", "monthly": "scheduled_monthly"}
+            for sched_type, trigger_value in trigger_map.items():
+                for snap in snapshots:
+                    raw_type = snap.get("type", "")
+                    # Map simplified type back to schedule type
+                    if raw_type == sched_type or raw_type == trigger_value:
+                        try:
+                            ts = datetime.fromisoformat(snap["date"])
+                            self._last_scheduled[sched_type] = ts
+                            break  # newest first, take the first match
+                        except (ValueError, KeyError):
+                            continue
+        except Exception:
+            pass
 
     def stop(self) -> None:
         """Stop the scheduler and cancel all pending timers."""
