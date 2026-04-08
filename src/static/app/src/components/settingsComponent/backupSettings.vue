@@ -54,6 +54,11 @@ const restoreComponents = ref({
 // Storage info (from settings if available)
 const storageUsed = ref(0);
 
+// Backup preview (expandable rows)
+const expandedBackup = ref(null);  // name of currently expanded backup
+const expandedDetails = ref(null); // details data
+const detailsLoading = ref(false);
+
 // Debounce timer for settings auto-save
 let saveTimer = null;
 const loaded = ref(false);
@@ -294,6 +299,22 @@ function calendarDayClick(day) {
     }
 }
 
+function toggleBackupDetails(name) {
+    if (expandedBackup.value === name) {
+        expandedBackup.value = null;
+        expandedDetails.value = null;
+        return;
+    }
+    expandedBackup.value = name;
+    detailsLoading.value = true;
+    fetchGet("/api/backup/global/details", { name }, (res) => {
+        detailsLoading.value = false;
+        if (res && res.data) {
+            expandedDetails.value = res.data;
+        }
+    });
+}
+
 function prevMonth() {
     calendarDate.value = calendarDate.value.subtract(1, "month");
     selectedDay.value = null;
@@ -519,8 +540,10 @@ onMounted(() => {
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr v-for="b in regularBackups" :key="b.name">
-                                    <td class="ps-3">
+                                <template v-for="b in regularBackups" :key="b.name">
+                                <tr>
+                                    <td class="ps-3" role="button" @click="toggleBackupDetails(b.name)">
+                                        <i class="bi me-1" :class="expandedBackup === b.name ? 'bi-chevron-down' : 'bi-chevron-right'" style="font-size:0.7em"></i>
                                         <span v-if="b.name === lastRestoredName" class="badge rounded-circle bg-success me-1 p-1" title="Last restored" style="width:8px;height:8px;display:inline-block"></span>
                                         <samp style="font-size: 0.8em">{{ b.name }}</samp>
                                     </td>
@@ -545,6 +568,68 @@ onMounted(() => {
                                         </div>
                                     </td>
                                 </tr>
+                                <tr v-if="expandedBackup === b.name" :key="b.name + '_details'">
+                                    <td colspan="5" class="px-4 py-3 bg-body-secondary">
+                                        <div v-if="detailsLoading" class="text-center py-2">
+                                            <div class="spinner-border spinner-border-sm text-secondary"></div>
+                                        </div>
+                                        <div v-else-if="expandedDetails" style="font-size: var(--density-font-sm, 0.8rem)">
+                                            <!-- Configurations -->
+                                            <div class="mb-2">
+                                                <strong><i class="bi bi-diagram-3 me-1"></i>WireGuard Configurations ({{ expandedDetails.configs?.length || 0 }})</strong>
+                                                <div class="ms-3 mt-1">
+                                                    <div v-for="c in expandedDetails.configs" :key="c.name" class="d-flex align-items-center gap-2 py-1">
+                                                        <i class="bi bi-hdd-network text-primary" style="font-size:0.75em"></i>
+                                                        <samp>{{ c.name }}</samp>
+                                                        <span class="badge bg-secondary-subtle text-secondary-emphasis rounded-pill" style="font-size:0.75em">
+                                                            {{ c.peers || 0 }} peers
+                                                        </span>
+                                                        <span v-if="c.restricted" class="badge bg-warning-subtle text-warning-emphasis rounded-pill" style="font-size:0.75em">
+                                                            {{ c.restricted }} restricted
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <!-- Dashboard components -->
+                                            <div class="mb-2" v-if="expandedDetails.dashboard">
+                                                <strong><i class="bi bi-gear me-1"></i>Dashboard Data</strong>
+                                                <div class="ms-3 mt-1 d-flex flex-wrap gap-3">
+                                                    <span v-if="expandedDetails.dashboard.webhooks" class="text-body-secondary">
+                                                        <i class="bi bi-link-45deg me-1"></i>{{ expandedDetails.dashboard.webhooks }} webhooks
+                                                    </span>
+                                                    <span v-if="expandedDetails.dashboard.clients" class="text-body-secondary">
+                                                        <i class="bi bi-people me-1"></i>{{ expandedDetails.dashboard.clients }} clients
+                                                    </span>
+                                                    <span v-if="expandedDetails.dashboard.peer_jobs" class="text-body-secondary">
+                                                        <i class="bi bi-clock me-1"></i>{{ expandedDetails.dashboard.peer_jobs }} peer jobs
+                                                    </span>
+                                                    <span v-if="expandedDetails.dashboard.share_links" class="text-body-secondary">
+                                                        <i class="bi bi-share me-1"></i>{{ expandedDetails.dashboard.share_links }} share links
+                                                    </span>
+                                                    <span v-if="expandedDetails.dashboard.api_keys" class="text-body-secondary">
+                                                        <i class="bi bi-key me-1"></i>{{ expandedDetails.dashboard.api_keys }} API keys
+                                                    </span>
+                                                    <span v-if="!expandedDetails.dashboard.webhooks && !expandedDetails.dashboard.clients && !expandedDetails.dashboard.peer_jobs && !expandedDetails.dashboard.share_links && !expandedDetails.dashboard.api_keys" class="text-body-secondary">
+                                                        No dashboard data
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <!-- Full DB -->
+                                            <div class="d-flex gap-3">
+                                                <span v-if="expandedDetails.has_full_db" class="text-success-emphasis">
+                                                    <i class="bi bi-database-check me-1"></i>Full database included (with transfer history)
+                                                </span>
+                                                <span v-else class="text-warning-emphasis">
+                                                    <i class="bi bi-database me-1"></i>Lightweight backup (no transfer history)
+                                                </span>
+                                                <span v-if="expandedDetails.has_settings" class="text-body-secondary">
+                                                    <i class="bi bi-sliders me-1"></i>Dashboard settings included
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                </template>
                             </tbody>
                         </table>
                     </div>
@@ -651,17 +736,81 @@ onMounted(() => {
                                     </h6>
                                     <div class="d-flex flex-column" :style="{ gap: 'var(--density-gap, 0.5rem)' }">
                                         <div v-for="b in selectedDayBackups" :key="b.name"
-                                             class="d-flex align-items-center gap-2 p-2 rounded-2 bg-body-secondary">
-                                            <span class="badge rounded-pill border" :class="typeBadgeClass(b.type)" :style="{ fontSize: 'var(--density-font-sm, 0.7rem)' }">
-                                                {{ b.type || 'manual' }}
-                                            </span>
-                                            <span v-if="b.name === lastRestoredName" class="badge rounded-circle bg-success p-1" title="Last restored" style="width:8px;height:8px;display:inline-block;flex-shrink:0"></span>
-                                            <samp style="font-size:0.8em; flex:1" class="text-truncate">{{ b.name }}</samp>
-                                            <span class="text-body-secondary" :style="{ fontSize: 'var(--density-font-sm, 0.75rem)' }">{{ formatSize(b.size) }}</span>
-                                            <div class="btn-group btn-group-sm">
-                                                <button class="btn btn-outline-secondary btn-sm rounded-start-2" @click="downloadBackup(b.name)"><i class="bi bi-download"></i></button>
-                                                <button class="btn btn-outline-primary btn-sm" @click="openRestoreModal(b)"><i class="bi bi-arrow-counterclockwise"></i></button>
-                                                <button class="btn btn-outline-danger btn-sm rounded-end-2" @click="deleteBackup(b.name)"><i class="bi bi-trash3"></i></button>
+                                             class="rounded-2 bg-body-secondary">
+                                            <div class="d-flex align-items-center gap-2 p-2">
+                                                <span class="badge rounded-pill border" :class="typeBadgeClass(b.type)" :style="{ fontSize: 'var(--density-font-sm, 0.7rem)' }">
+                                                    {{ b.type || 'manual' }}
+                                                </span>
+                                                <span v-if="b.name === lastRestoredName" class="badge rounded-circle bg-success p-1" title="Last restored" style="width:8px;height:8px;display:inline-block;flex-shrink:0"></span>
+                                                <samp role="button" style="font-size:0.8em; flex:1" class="text-truncate" @click="toggleBackupDetails(b.name)">
+                                                    <i class="bi me-1" :class="expandedBackup === b.name ? 'bi-chevron-down' : 'bi-chevron-right'" style="font-size:0.7em"></i>{{ b.name }}
+                                                </samp>
+                                                <span class="text-body-secondary" :style="{ fontSize: 'var(--density-font-sm, 0.75rem)' }">{{ formatSize(b.size) }}</span>
+                                                <div class="btn-group btn-group-sm">
+                                                    <button class="btn btn-outline-secondary btn-sm rounded-start-2" @click="downloadBackup(b.name)"><i class="bi bi-download"></i></button>
+                                                    <button class="btn btn-outline-primary btn-sm" @click="openRestoreModal(b)"><i class="bi bi-arrow-counterclockwise"></i></button>
+                                                    <button class="btn btn-outline-danger btn-sm rounded-end-2" @click="deleteBackup(b.name)"><i class="bi bi-trash3"></i></button>
+                                                </div>
+                                            </div>
+                                            <!-- Expandable detail tree for calendar view -->
+                                            <div v-if="expandedBackup === b.name" class="px-3 pb-2" style="font-size: var(--density-font-sm, 0.8rem)">
+                                                <div v-if="detailsLoading" class="text-center py-2">
+                                                    <div class="spinner-border spinner-border-sm text-secondary"></div>
+                                                </div>
+                                                <div v-else-if="expandedDetails">
+                                                    <!-- Configurations -->
+                                                    <div class="mb-2">
+                                                        <strong><i class="bi bi-diagram-3 me-1"></i>WireGuard Configurations ({{ expandedDetails.configs?.length || 0 }})</strong>
+                                                        <div class="ms-3 mt-1">
+                                                            <div v-for="c in expandedDetails.configs" :key="c.name" class="d-flex align-items-center gap-2 py-1">
+                                                                <i class="bi bi-hdd-network text-primary" style="font-size:0.75em"></i>
+                                                                <samp>{{ c.name }}</samp>
+                                                                <span class="badge bg-secondary-subtle text-secondary-emphasis rounded-pill" style="font-size:0.75em">
+                                                                    {{ c.peers || 0 }} peers
+                                                                </span>
+                                                                <span v-if="c.restricted" class="badge bg-warning-subtle text-warning-emphasis rounded-pill" style="font-size:0.75em">
+                                                                    {{ c.restricted }} restricted
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <!-- Dashboard components -->
+                                                    <div class="mb-2" v-if="expandedDetails.dashboard">
+                                                        <strong><i class="bi bi-gear me-1"></i>Dashboard Data</strong>
+                                                        <div class="ms-3 mt-1 d-flex flex-wrap gap-3">
+                                                            <span v-if="expandedDetails.dashboard.webhooks" class="text-body-secondary">
+                                                                <i class="bi bi-link-45deg me-1"></i>{{ expandedDetails.dashboard.webhooks }} webhooks
+                                                            </span>
+                                                            <span v-if="expandedDetails.dashboard.clients" class="text-body-secondary">
+                                                                <i class="bi bi-people me-1"></i>{{ expandedDetails.dashboard.clients }} clients
+                                                            </span>
+                                                            <span v-if="expandedDetails.dashboard.peer_jobs" class="text-body-secondary">
+                                                                <i class="bi bi-clock me-1"></i>{{ expandedDetails.dashboard.peer_jobs }} peer jobs
+                                                            </span>
+                                                            <span v-if="expandedDetails.dashboard.share_links" class="text-body-secondary">
+                                                                <i class="bi bi-share me-1"></i>{{ expandedDetails.dashboard.share_links }} share links
+                                                            </span>
+                                                            <span v-if="expandedDetails.dashboard.api_keys" class="text-body-secondary">
+                                                                <i class="bi bi-key me-1"></i>{{ expandedDetails.dashboard.api_keys }} API keys
+                                                            </span>
+                                                            <span v-if="!expandedDetails.dashboard.webhooks && !expandedDetails.dashboard.clients && !expandedDetails.dashboard.peer_jobs && !expandedDetails.dashboard.share_links && !expandedDetails.dashboard.api_keys" class="text-body-secondary">
+                                                                No dashboard data
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <!-- Full DB -->
+                                                    <div class="d-flex gap-3">
+                                                        <span v-if="expandedDetails.has_full_db" class="text-success-emphasis">
+                                                            <i class="bi bi-database-check me-1"></i>Full database included (with transfer history)
+                                                        </span>
+                                                        <span v-else class="text-warning-emphasis">
+                                                            <i class="bi bi-database me-1"></i>Lightweight backup (no transfer history)
+                                                        </span>
+                                                        <span v-if="expandedDetails.has_settings" class="text-body-secondary">
+                                                            <i class="bi bi-sliders me-1"></i>Dashboard settings included
+                                                        </span>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>

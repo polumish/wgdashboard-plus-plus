@@ -180,6 +180,65 @@ class BackupManager:
                 shutil.rmtree(snap_dir, ignore_errors=True)
                 return {"status": False, "error": str(exc)}
 
+    def getSnapshotDetails(self, name: str) -> dict:
+        """Return detailed contents of a global snapshot for preview."""
+        snap_dir = os.path.join(self.backup_path, "global", name)
+        if not os.path.isdir(snap_dir):
+            return None
+
+        details = {"configs": [], "dashboard": {}, "has_full_db": False}
+
+        # 1. List config files with basic info
+        configs_dir = os.path.join(snap_dir, "configs")
+        if os.path.isdir(configs_dir):
+            for f in sorted(os.listdir(configs_dir)):
+                if f.endswith(".conf"):
+                    details["configs"].append({"name": f.replace(".conf", "")})
+
+        # 2. Read peers.json to get peer counts per config
+        peers_path = os.path.join(snap_dir, "db", "peers.json")
+        if os.path.isfile(peers_path):
+            try:
+                with open(peers_path) as f:
+                    peers_data = json.load(f)
+                # Count peers per config (tables without suffixes = main peer tables)
+                for conf in details["configs"]:
+                    name_key = conf["name"]
+                    if name_key in peers_data:
+                        conf["peers"] = len(peers_data[name_key])
+                    else:
+                        conf["peers"] = 0
+                    # Check restricted
+                    restricted_key = f"{name_key}_restrict_access"
+                    if restricted_key in peers_data:
+                        conf["restricted"] = len(peers_data[restricted_key])
+            except Exception:
+                pass
+
+        # 3. Read dashboard.json to get component counts
+        dashboard_path = os.path.join(snap_dir, "db", "dashboard.json")
+        if os.path.isfile(dashboard_path):
+            try:
+                with open(dashboard_path) as f:
+                    dashboard_data = json.load(f)
+                details["dashboard"] = {
+                    "webhooks": len(dashboard_data.get("DashboardWebHooks", [])),
+                    "clients": len(dashboard_data.get("DashboardClients", [])),
+                    "peer_jobs": len(dashboard_data.get("PeerJobs", [])),
+                    "share_links": len(dashboard_data.get("PeerShareLinks", [])),
+                    "api_keys": len(dashboard_data.get("DashboardAPIKeys", [])),
+                }
+            except Exception:
+                pass
+
+        # 4. Check for full DB file
+        details["has_full_db"] = os.path.isfile(os.path.join(snap_dir, "db", "wgdashboard.db"))
+
+        # 5. Settings
+        details["has_settings"] = os.path.isfile(os.path.join(snap_dir, "settings", "wg-dashboard.ini"))
+
+        return details
+
     def getGlobalSnapshots(self, filter_type: Optional[str] = None) -> list:
         """Return list of global snapshot dicts, newest first.
 

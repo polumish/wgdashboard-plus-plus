@@ -862,6 +862,12 @@ def API_backup_global_list():
         filter_type = None
     return ResponseObject(data=AllBackupManager.getGlobalSnapshots(filter_type=filter_type))
 
+@app.get(f'{APP_PREFIX}/api/backup/global/details')
+def API_backup_global_details():
+    name = request.args.get("name", "")
+    result = AllBackupManager.getSnapshotDetails(name)
+    return ResponseObject(data=result)
+
 @app.get(f'{APP_PREFIX}/api/backup/global/create')
 def API_backup_global_create():
     result = AllBackupManager.createGlobalSnapshot(trigger="manual")
