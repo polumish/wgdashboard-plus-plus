@@ -282,3 +282,82 @@ class DiagnosticsCollector:
             "warnings": warnings,
             "timestamp": int(time.time()),
         }
+
+
+class DiagnosticsMonitor:
+    """Background monitor that tracks state changes and notifies SSE subscribers."""
+
+    def __init__(self):
+        self._collector = DiagnosticsCollector()
+        self._last_state = {}  # interface_name → last JSON string
+        self._subscribers = []  # list of (queue, interfaces_filter)
+        self._lock = threading.Lock()
+        self._running = False
+
+    def subscribe(self, interfaces: list | None = None):
+        """Subscribe to diagnostics updates. Returns a queue that receives JSON strings."""
+        import queue
+        q = queue.Queue(maxsize=50)
+        with self._lock:
+            self._subscribers.append((q, interfaces))
+        return q
+
+    def unsubscribe(self, q):
+        """Remove a subscriber queue."""
+        with self._lock:
+            self._subscribers = [(sq, f) for sq, f in self._subscribers if sq is not q]
+
+    def start(self, get_configurations, app_logger):
+        """Start the background monitor thread."""
+        self._get_configurations = get_configurations
+        self._logger = app_logger
+        self._running = True
+        thread = threading.Thread(target=self._monitor_loop, daemon=True)
+        thread.start()
+        self._logger.info("DiagnosticsMonitor thread started")
+
+    def _get_peer_names(self, config) -> dict:
+        """Extract public_key → name mapping from a WireguardConfiguration's peers."""
+        names = {}
+        try:
+            for peer in config.Peers:
+                if hasattr(peer, 'name') and peer.name:
+                    names[peer.id] = peer.name
+                elif hasattr(peer, 'DNS') and peer.DNS:
+                    names[peer.id] = peer.DNS
+        except Exception:
+            pass
+        return names
+
+    def _monitor_loop(self):
+        """Main loop: collect snapshots, push changes to subscribers."""
+        import queue as queue_module
+        while self._running:
+            try:
+                configurations = self._get_configurations()
+                full_snapshot = {}
+
+                for name, config in configurations.items():
+                    protocol = getattr(config, 'Protocol', 'wg')
+                    peer_names = self._get_peer_names(config)
+                    snapshot = self._collector.build_snapshot(name, protocol, peer_names)
+                    if snapshot:
+                        full_snapshot[name] = snapshot
+
+                with self._lock:
+                    for name, snap in full_snapshot.items():
+                        snap_json = json.dumps(snap, sort_keys=True)
+                        if self._last_state.get(name) != snap_json:
+                            self._last_state[name] = snap_json
+                            for q, iface_filter in self._subscribers:
+                                if iface_filter is None or name in iface_filter:
+                                    try:
+                                        payload = json.dumps({"interfaces": {name: snap}, "timestamp": int(time.time())})
+                                        q.put_nowait(payload)
+                                    except queue_module.Full:
+                                        pass
+            except Exception as e:
+                if self._logger:
+                    self._logger.error(f"DiagnosticsMonitor error: {e}")
+
+            time.sleep(1)

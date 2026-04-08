@@ -38,6 +38,7 @@ from logging.config import dictConfig
 
 from modules.DashboardClients import DashboardClients
 from modules.DashboardPlugins import DashboardPlugins
+from modules.WireguardDiagnostics import DiagnosticsMonitor
 from modules.DashboardWebHooks import DashboardWebHooks
 from modules.NewConfigurationTemplates import NewConfigurationTemplates
 from modules.BackupManager import BackupManager
@@ -179,9 +180,11 @@ def startThreads():
     if AllBackupScheduler is not None:
         AllBackupScheduler.start()
         app.logger.info("Background Thread #3 (BackupScheduler) Started")
+    AllDiagnosticsMonitor.start(lambda: WireguardConfigurations, app.logger)
 
 AllBackupManager: BackupManager = None
 AllBackupScheduler: BackupScheduler = None
+AllDiagnosticsMonitor = DiagnosticsMonitor()
 
 _restore_status = {"active": False, "step": "", "progress": 0, "total": 0, "done": False, "error": ""}
 
@@ -1008,6 +1011,43 @@ def API_backup_settings_update():
             DashboardConfig.SetConfig("Backup", key, str(value))
     DashboardConfig.SaveConfig()
     return ResponseObject(status=True)
+
+@app.route(f'{APP_PREFIX}/api/sse/diagnostics', methods=['GET'])
+def API_SSE_Diagnostics():
+    if not current_user:
+        return ResponseObject(False, "Invalid authentication.", status_code=401)
+
+    interface = request.args.get('interface', None)
+    interfaces_filter = [interface] if interface else None
+
+    def generate():
+        import queue as queue_module
+        q = AllDiagnosticsMonitor.subscribe(interfaces_filter)
+        try:
+            # Send initial full state
+            initial = {}
+            for name in (interfaces_filter or WireguardConfigurations.keys()):
+                if name in AllDiagnosticsMonitor._last_state:
+                    initial[name] = json.loads(AllDiagnosticsMonitor._last_state[name])
+            if initial:
+                yield f"data: {json.dumps({'interfaces': initial, 'timestamp': int(time.time())})}\n\n"
+
+            heartbeat_interval = 15
+            last_heartbeat = time.time()
+
+            while True:
+                try:
+                    payload = q.get(timeout=1)
+                    yield f"data: {payload}\n\n"
+                except queue_module.Empty:
+                    if time.time() - last_heartbeat >= heartbeat_interval:
+                        yield ": heartbeat\n\n"
+                        last_heartbeat = time.time()
+        finally:
+            AllDiagnosticsMonitor.unsubscribe(q)
+
+    return app.response_class(generate(), mimetype='text/event-stream',
+                              headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 @app.get(f'{APP_PREFIX}/api/getDashboardConfiguration')
 def API_getDashboardConfiguration():

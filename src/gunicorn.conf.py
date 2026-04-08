@@ -10,7 +10,7 @@ def post_worker_init(worker):
 
 worker_class = 'gthread'
 workers = 1
-threads = 2
+threads = 4
 bind = f"{app_host}:{app_port}"
 daemon = True
 pidfile = './gunicorn.pid'
