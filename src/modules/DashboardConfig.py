@@ -277,6 +277,14 @@ class DashboardConfig:
         except Exception as e:
             return False
 
+    def ReloadConfig(self) -> bool:
+        """Re-read the configuration file from disk (e.g. after restore)."""
+        try:
+            self.__config.read(DashboardConfig.ConfigurationFilePath)
+            return True
+        except Exception:
+            return False
+
     def GetConfig(self, section, key) ->tuple[bool, bool] | tuple[bool, str] | tuple[bool, list[str]] | tuple[bool, None]:
         if section not in self.__config:
             return False, None

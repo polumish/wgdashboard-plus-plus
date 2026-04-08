@@ -180,6 +180,24 @@ def startThreads():
 AllBackupManager: BackupManager = None
 AllBackupScheduler: BackupScheduler = None
 
+def _reload_wireguard_configurations():
+    """Reinitialize WireGuard configurations after a restore.
+    Removes configs that no longer exist on disk, re-reads changed ones."""
+    global WireguardConfigurations
+    # Find configs on disk
+    disk_confs = set()
+    wg_path = DashboardConfig.GetConfig("Server", "wg_conf_path")[1]
+    if os.path.isdir(wg_path):
+        for f in os.listdir(wg_path):
+            if f.endswith(".conf"):
+                disk_confs.add(f.replace(".conf", ""))
+    # Remove configs not on disk anymore
+    stale = [k for k in WireguardConfigurations.keys() if k not in disk_confs]
+    for k in stale:
+        del WireguardConfigurations[k]
+    # Reinitialize (adds new, updates changed)
+    InitWireguardConfigurationsList()
+
 dictConfig({
     'version': 1,
     'formatters': {'default': {
@@ -813,6 +831,11 @@ def API_backup_global_restore():
     name = data.get("name", "")
     components = data.get("components", [])
     result = AllBackupManager.restoreFromSnapshot(name, components)
+    if result["status"] and "configurations" in components:
+        # Reinitialize WireGuard configurations after restore
+        _reload_wireguard_configurations()
+    if result["status"] and "dashboard_settings" in components:
+        DashboardConfig.ReloadConfig()
     return ResponseObject(status=result["status"], message=result.get("message", ""), data=result.get("restored", []))
 
 @app.get(f'{APP_PREFIX}/api/backup/config/list')
@@ -848,6 +871,8 @@ def API_backup_config_restore():
     config_name = data.get("configName", "")
     name = data.get("name", "")
     result = AllBackupManager.restoreConfigBackup(config_name, name)
+    if result.get("status"):
+        _reload_wireguard_configurations()
     return ResponseObject(status=result.get("status", False), message=result.get("message", ""))
 
 @app.get(f'{APP_PREFIX}/api/backup/settings')
