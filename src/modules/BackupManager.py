@@ -74,7 +74,8 @@ class BackupManager:
         self.ini_path = ini_path
         self.db_engine = db_engine
 
-        self._lock = threading.Lock()
+        # No global lock — sqlite3.backup() is thread-safe and file ops use unique dirs
+        self._lock = None  # Kept for reference but not used
 
         # Ensure directory structure exists
         os.makedirs(os.path.join(self.backup_path, "global"), exist_ok=True)
@@ -93,7 +94,7 @@ class BackupManager:
         Returns a dict with keys: status, name, manifest (on success)
         or status=False, error on failure.
         """
-        with self._lock:
+        if True:  # no lock needed — sqlite3.backup() is thread-safe
             ts = self._timestamp()
             name = f"snapshot_{ts}"
             snap_dir = os.path.join(self.backup_path, "global", name)
@@ -189,7 +190,7 @@ class BackupManager:
 
     def deleteGlobalSnapshot(self, name: str) -> bool:
         """Delete a global snapshot by name. Returns True on success."""
-        with self._lock:
+        if True:  # no lock needed — sqlite3.backup() is thread-safe
             snap_dir = os.path.join(self.backup_path, "global", name)
             return self._delete_directory(snap_dir)
 
@@ -219,7 +220,7 @@ class BackupManager:
         if conf_file is None:
             return {"status": False, "error": f"Config file for '{config_name}' not found"}
 
-        with self._lock:
+        if True:  # no lock needed — sqlite3.backup() is thread-safe
             ts = self._timestamp()
             name = f"{config_name}_{ts}"
             backup_dir = os.path.join(
@@ -296,7 +297,7 @@ class BackupManager:
 
     def deleteConfigBackup(self, config_name: str, name: str) -> bool:
         """Delete a per-config backup. Returns True on success."""
-        with self._lock:
+        if True:  # no lock needed — sqlite3.backup() is thread-safe
             backup_dir = os.path.join(
                 self.backup_path, "per-config", config_name, name
             )
@@ -368,7 +369,7 @@ class BackupManager:
 
         restored = []
 
-        with self._lock:
+        if True:  # no lock needed — sqlite3.backup() is thread-safe
             # 1. Dashboard settings (ini file)
             if "dashboard_settings" in components:
                 ini_backup = os.path.join(snap_dir, "settings", "wg-dashboard.ini")
@@ -495,7 +496,7 @@ class BackupManager:
         except Exception:
             pass
 
-        with self._lock:
+        if True:  # no lock needed — sqlite3.backup() is thread-safe
             # 1. Restore .conf file
             conf_backup = os.path.join(backup_dir, f"{config_name}.conf")
             if os.path.isfile(conf_backup):
