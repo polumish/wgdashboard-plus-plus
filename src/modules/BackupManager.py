@@ -74,7 +74,7 @@ class BackupManager:
         self.ini_path = ini_path
         self.db_engine = db_engine
 
-        # No global lock — sqlite3.backup() is thread-safe and file ops use unique dirs
+        # No global lock — backup operations use unique directories
         self._lock = None  # Kept for reference but not used
 
         # Ensure directory structure exists
@@ -94,7 +94,7 @@ class BackupManager:
         Returns a dict with keys: status, name, manifest (on success)
         or status=False, error on failure.
         """
-        if True:  # no lock needed — sqlite3.backup() is thread-safe
+        if True:  # no lock needed
             ts = self._timestamp()
             name = f"snapshot_{ts}"
             snap_dir = os.path.join(self.backup_path, "global", name)
@@ -122,10 +122,11 @@ class BackupManager:
                 db_dir = os.path.join(snap_dir, "db")
                 os.makedirs(db_dir, exist_ok=True)
 
-                # 3a. Full DB copy via sqlite3.backup() — non-blocking, includes ALL data
-                #     This is used for full database migration/restore
-                db_copy_path = os.path.join(db_dir, "wgdashboard.db")
-                self._sqlite_backup(db_copy_path)
+                # 3a. Full DB dump — non-blocking, includes ALL data
+                db_type = self._get_db_type()
+                dump_ext = ".sql" if db_type == "mysql" else ".db"
+                db_copy_path = os.path.join(db_dir, f"wgdashboard{dump_ext}")
+                self._full_db_backup(db_copy_path)
 
                 # 3b. Lightweight JSON export (without transfer/history) — for granular restore
                 all_data = self._export_database(skip_heavy=True)
@@ -232,7 +233,10 @@ class BackupManager:
                 pass
 
         # 4. Check for full DB file
-        details["has_full_db"] = os.path.isfile(os.path.join(snap_dir, "db", "wgdashboard.db"))
+        details["has_full_db"] = (
+            os.path.isfile(os.path.join(snap_dir, "db", "wgdashboard.sql"))
+            or os.path.isfile(os.path.join(snap_dir, "db", "wgdashboard.db"))
+        )
 
         # 5. Settings
         details["has_settings"] = os.path.isfile(os.path.join(snap_dir, "settings", "wg-dashboard.ini"))
@@ -249,7 +253,7 @@ class BackupManager:
 
     def deleteGlobalSnapshot(self, name: str) -> bool:
         """Delete a global snapshot by name. Returns True on success."""
-        if True:  # no lock needed — sqlite3.backup() is thread-safe
+        if True:  # no lock needed
             snap_dir = os.path.join(self.backup_path, "global", name)
             return self._delete_directory(snap_dir)
 
@@ -279,7 +283,7 @@ class BackupManager:
         if conf_file is None:
             return {"status": False, "error": f"Config file for '{config_name}' not found"}
 
-        if True:  # no lock needed — sqlite3.backup() is thread-safe
+        if True:  # no lock needed
             ts = self._timestamp()
             name = f"{config_name}_{ts}"
             backup_dir = os.path.join(
@@ -356,7 +360,7 @@ class BackupManager:
 
     def deleteConfigBackup(self, config_name: str, name: str) -> bool:
         """Delete a per-config backup. Returns True on success."""
-        if True:  # no lock needed — sqlite3.backup() is thread-safe
+        if True:  # no lock needed
             backup_dir = os.path.join(
                 self.backup_path, "per-config", config_name, name
             )
@@ -428,7 +432,7 @@ class BackupManager:
 
         restored = []
 
-        if True:  # no lock needed — sqlite3.backup() is thread-safe
+        if True:  # no lock needed
             # 1. Dashboard settings (ini file)
             if "dashboard_settings" in components:
                 ini_backup = os.path.join(snap_dir, "settings", "wg-dashboard.ini")
@@ -490,10 +494,14 @@ class BackupManager:
 
             # 4. Database restore (alongside configurations)
             if "configurations" in components:
-                # Prefer full .db file restore (exact copy, includes transfer/history)
-                db_backup = os.path.join(snap_dir, "db", "wgdashboard.db")
-                if os.path.isfile(db_backup):
-                    self._sqlite_restore(db_backup)
+                # Prefer full dump restore (includes transfer/history)
+                db_sql = os.path.join(snap_dir, "db", "wgdashboard.sql")
+                db_sqlite = os.path.join(snap_dir, "db", "wgdashboard.db")
+                if os.path.isfile(db_sql):
+                    self._full_db_restore(db_sql)
+                    restored.append("full_database")
+                elif os.path.isfile(db_sqlite):
+                    self._full_db_restore(db_sqlite)
                     restored.append("full_database")
                 else:
                     # Fallback: JSON-based restore (older snapshots without .db file)
@@ -555,7 +563,7 @@ class BackupManager:
         except Exception:
             pass
 
-        if True:  # no lock needed — sqlite3.backup() is thread-safe
+        if True:  # no lock needed
             # 1. Restore .conf file
             conf_backup = os.path.join(backup_dir, f"{config_name}.conf")
             if os.path.isfile(conf_backup):
@@ -752,55 +760,107 @@ class BackupManager:
                 return candidate
         return None
 
-    def _sqlite_backup(self, dest_path: str) -> bool:
-        """Create a non-blocking copy of the SQLite database using sqlite3.backup().
+    def _get_db_type(self) -> str:
+        """Return 'mysql', 'postgresql', or 'sqlite' based on engine URL."""
+        url = str(self.db_engine.url)
+        if "mysql" in url:
+            return "mysql"
+        if "postgresql" in url:
+            return "postgresql"
+        return "sqlite"
 
-        This is atomic and does NOT block concurrent writers (background threads
-        can continue writing transfer data while the backup runs).
-        Typically completes in <100ms even for large databases.
+    def _get_mysql_credentials(self) -> dict:
+        """Extract MySQL connection details from SQLAlchemy engine URL."""
+        url = self.db_engine.url
+        return {
+            "host": url.host or "127.0.0.1",
+            "port": url.port or 3306,
+            "user": url.username or "root",
+            "password": url.password or "",
+            "database": url.database or "wgdashboard",
+        }
+
+    def _full_db_backup(self, dest_path: str) -> bool:
+        """Create a full database dump (non-blocking).
+
+        For MySQL/MariaDB: uses mysqldump --single-transaction (no locks)
+        For SQLite: uses sqlite3.backup() API
         """
-        import sqlite3
-        try:
-            db_url = str(self.db_engine.url)
-            # Extract file path from SQLAlchemy URL (sqlite:///path/to/db)
-            if "sqlite" not in db_url:
-                return False  # Not SQLite, skip
-            db_path = db_url.split("///")[-1] if "///" in db_url else db_url.split("//")[-1]
-            if not os.path.isfile(db_path):
-                return False
+        import subprocess
+        db_type = self._get_db_type()
 
-            src_conn = sqlite3.connect(db_path)
-            dst_conn = sqlite3.connect(dest_path)
-            src_conn.backup(dst_conn)
-            dst_conn.close()
-            src_conn.close()
-            return True
+        try:
+            if db_type == "mysql":
+                creds = self._get_mysql_credentials()
+                cmd = [
+                    "mysqldump",
+                    f"--host={creds['host']}",
+                    f"--port={creds['port']}",
+                    f"--user={creds['user']}",
+                    f"--password={creds['password']}",
+                    "--single-transaction",
+                    "--routines",
+                    "--triggers",
+                    creds["database"],
+                ]
+                with open(dest_path, "w") as f:
+                    result = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE, timeout=120)
+                return result.returncode == 0
+
+            elif db_type == "sqlite":
+                import sqlite3
+                db_url = str(self.db_engine.url)
+                db_path = db_url.split("///")[-1] if "///" in db_url else db_url.split("//")[-1]
+                if not os.path.isfile(db_path):
+                    return False
+                src_conn = sqlite3.connect(db_path)
+                dst_conn = sqlite3.connect(dest_path)
+                src_conn.backup(dst_conn)
+                dst_conn.close()
+                src_conn.close()
+                return True
+
+            return False
         except Exception:
             return False
 
-    def _sqlite_restore(self, src_path: str) -> bool:
-        """Restore the SQLite database from a backup .db file.
+    def _full_db_restore(self, src_path: str) -> bool:
+        """Restore a full database from dump file.
 
-        Replaces the live database file with the backup copy.
-        The SQLAlchemy engine will pick up the new data on next connection.
+        For MySQL/MariaDB: uses mysql client to import SQL dump
+        For SQLite: uses sqlite3.backup() in reverse
         """
-        import sqlite3
+        import subprocess
+        db_type = self._get_db_type()
+
         try:
-            db_url = str(self.db_engine.url)
-            if "sqlite" not in db_url:
-                return False
-            db_path = db_url.split("///")[-1] if "///" in db_url else db_url.split("//")[-1]
+            if db_type == "mysql":
+                creds = self._get_mysql_credentials()
+                cmd = [
+                    "mysql",
+                    f"--host={creds['host']}",
+                    f"--port={creds['port']}",
+                    f"--user={creds['user']}",
+                    f"--password={creds['password']}",
+                    creds["database"],
+                ]
+                with open(src_path, "r") as f:
+                    result = subprocess.run(cmd, stdin=f, stderr=subprocess.PIPE, timeout=120)
+                return result.returncode == 0
 
-            # Dispose all connections so the file is not locked
-            self.db_engine.dispose()
+            elif db_type == "sqlite":
+                import sqlite3
+                db_url = str(self.db_engine.url)
+                db_path = db_url.split("///")[-1] if "///" in db_url else db_url.split("//")[-1]
+                self.db_engine.dispose()
+                src_conn = sqlite3.connect(src_path)
+                dst_conn = sqlite3.connect(db_path)
+                src_conn.backup(dst_conn)
+                dst_conn.close()
+                src_conn.close()
+                return True
 
-            # Use sqlite3.backup() in reverse — from backup file to live DB
-            src_conn = sqlite3.connect(src_path)
-            dst_conn = sqlite3.connect(db_path)
-            src_conn.backup(dst_conn)
-            dst_conn.close()
-            src_conn.close()
-            return True
+            return False
         except Exception:
             return False
 
