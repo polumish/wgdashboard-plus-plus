@@ -50,3 +50,54 @@ class TestDiagnosticsCollector:
             result = collector.collect_interface_info("wg99")
 
         assert result is None
+
+    def test_collect_peers(self):
+        """Collect peer data from wg show including handshake, transfer, endpoints, allowed-ips."""
+        from modules.WireguardDiagnostics import DiagnosticsCollector
+
+        wg_show_output = (
+            "interface: wg0\n"
+            "  public key: ServerPubKey=\n"
+            "  private key: (hidden)\n"
+            "  listening port: 65350\n"
+            "  fwmark: 0xca6c\n"
+            "\n"
+            "peer: PeerPubKeyA=\n"
+            "  endpoint: 85.10.42.1:51820\n"
+            "  allowed ips: 10.200.0.2/32, 192.168.1.0/24\n"
+            "  latest handshake: 12 seconds ago\n"
+            "  transfer: 25.16 MiB received, 1.05 GiB sent\n"
+            "\n"
+            "peer: PeerPubKeyB=\n"
+            "  allowed ips: 10.200.0.3/32\n"
+            "  transfer: 0 B received, 0 B sent\n"
+        )
+
+        with patch("subprocess.check_output", return_value=wg_show_output.encode("utf-8")):
+            collector = DiagnosticsCollector()
+            iface_data, peers = collector.collect_peers("wg0")
+
+        assert iface_data["publicKey"] == "ServerPubKey="
+        assert iface_data["listenPort"] == 65350
+        assert iface_data["fwmark"] == "0xca6c"
+        assert len(peers) == 2
+        assert peers[0]["publicKey"] == "PeerPubKeyA="
+        assert peers[0]["endpoint"] == "85.10.42.1:51820"
+        assert peers[0]["allowedIps"] == ["10.200.0.2/32", "192.168.1.0/24"]
+        assert peers[0]["latestHandshake"] == "12 seconds ago"
+        assert peers[0]["status"] == "online"
+        assert peers[1]["publicKey"] == "PeerPubKeyB="
+        assert peers[1]["endpoint"] is None
+        assert peers[1]["status"] == "inactive"
+
+    def test_collect_peers_interface_down(self):
+        """When interface is down, return empty."""
+        import subprocess
+        from modules.WireguardDiagnostics import DiagnosticsCollector
+
+        with patch("subprocess.check_output", side_effect=subprocess.CalledProcessError(1, "wg")):
+            collector = DiagnosticsCollector()
+            iface_data, peers = collector.collect_peers("wg0")
+
+        assert iface_data is None
+        assert peers == []
