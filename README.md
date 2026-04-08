@@ -90,10 +90,41 @@ Fit more peers on screen with tight spacing.
 - **SSE-powered** — Server-Sent Events push updates instantly when state changes (no polling)
 - **Per-interface diagnostics** — peers, endpoints, handshakes, transfer, system routes in one panel
 - **Route validation** — cross-references AllowedIPs with kernel routing table, detects mismatches
-- **Automatic warnings** — offline peers (handshake > 2min), missing routes, orphan routes, inactive peers with routes
+- **Automatic warnings** — offline peers (handshake > threshold), missing routes, orphan routes, inactive peers with routes
+- **Configurable threshold** — `peer_handshake_threshold` in `[Server]` section (seconds, default 300 = 5 min)
 - **Settings tab** — unified view of all WG interfaces in Settings → Network Diagnostics
 - **Collapsible panel redesign** — replaces old stat cards and charts with compact diagnostic terminal
 - **Neon visual style** — dark semi-transparent background, color-coded status indicators with subtle glow, pulsing animations
+- **REST API** — programmatic access for monitoring and alerting
+
+#### Diagnostics API
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/diagnostics` | Full snapshot of all interfaces (peers, routes, warnings) |
+| `GET /api/diagnostics?interface=wg0` | Snapshot for a single interface |
+| `GET /api/diagnostics/warnings` | All warnings across all interfaces with count |
+| `GET /api/sse/diagnostics` | SSE stream — live updates pushed on state change |
+| `GET /api/sse/diagnostics?interface=wg0` | SSE stream for a single interface |
+
+All endpoints require authentication (session cookie or `wg-dashboard-apikey` header). SSE endpoints also accept `?apikey=` query parameter for cross-server access.
+
+Example:
+```bash
+# Get all warnings
+curl -H "wg-dashboard-apikey: YOUR_KEY" http://server:10086/api/diagnostics/warnings
+
+# Full diagnostics for one interface
+curl -H "wg-dashboard-apikey: YOUR_KEY" http://server:10086/api/diagnostics?interface=Full-Halfnet
+```
+
+Warning types:
+| Type | Meaning |
+|------|---------|
+| `peer_offline` | Peer handshake older than threshold (default 5 min) |
+| `peer_inactive` | Peer has never connected |
+| `missing_route` | AllowedIPs entry exists but no kernel route found |
+| `orphan_route` | Kernel route exists but no matching peer AllowedIPs |
 
 ### UI Improvements
 - **Display density settings** — Compact / Normal / Comfortable (Gmail-style)
