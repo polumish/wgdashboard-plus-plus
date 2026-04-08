@@ -212,8 +212,8 @@ function doRestore() {
         .map(([k]) => k);
     fetchPost("/api/backup/global/restore", { name: restoreTarget.value.name, components }, (res) => {
         if (res && res.status) {
-            closeRestoreModal();
-            loadBackups();
+            // Full page reload — restore replaces DB (invalidates session) and WG configs
+            window.location.reload();
         }
     });
 }
