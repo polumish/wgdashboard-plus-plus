@@ -40,6 +40,7 @@ const selectedDay = ref(null);
 // Restore modal state
 const restoreModal = ref(false);
 const restoreTarget = ref(null);
+const showRestorePoints = ref(false);
 const restoreComponents = ref({
     configurations: true,
     dashboard_settings: true,
@@ -60,9 +61,12 @@ const loaded = ref(false);
 // ─── Computed ─────────────────────────────────────────────────────────────────
 
 const filteredBackups = computed(() => {
-    if (activeFilter.value === "all") return backups.value;
-    return backups.value.filter(b => b.type === activeFilter.value);
+    if (activeFilter.value === "all") return backups.value.filter(b => b.type !== 'restore_point');
+    return backups.value.filter(b => b.type === activeFilter.value && b.type !== 'restore_point');
 });
+
+const regularBackups = computed(() => filteredBackups.value);
+const restorePoints = computed(() => backups.value.filter(b => b.type === 'restore_point'));
 
 const backupCountByType = computed(() => {
     const counts = { daily: 0, weekly: 0, monthly: 0, auto: 0, manual: 0 };
@@ -206,22 +210,42 @@ function toggleAllRestore() {
     Object.keys(restoreComponents.value).forEach(k => (restoreComponents.value[k] = newVal));
 }
 
-const restoring = ref(false)
+const restoring = ref(false);
+const restoreProgress = ref({ step: "", progress: 0, total: 6, done: false, error: "" });
+
+function pollRestoreStatus() {
+    const interval = setInterval(() => {
+        fetchGet("/api/backup/restore/status", {}, (res) => {
+            if (res && res.data) {
+                restoreProgress.value = res.data;
+                if (res.data.done) {
+                    clearInterval(interval);
+                    setTimeout(() => window.location.reload(), 1000);
+                }
+                if (res.data.error) {
+                    clearInterval(interval);
+                    restoring.value = false;
+                }
+            }
+        });
+    }, 1000);
+    // Safety timeout
+    setTimeout(() => { clearInterval(interval); window.location.reload(); }, 60000);
+}
 
 function doRestore() {
     if (!restoreTarget.value || restoring.value) return;
     restoring.value = true;
+    restoreModal.value = false;
+    restoreProgress.value = { step: "", progress: 0, total: 6, done: false, error: "" };
     const snapshotName = restoreTarget.value.name;
     localStorage.setItem("wgdash_last_restored", snapshotName);
     const components = Object.entries(restoreComponents.value)
         .filter(([, v]) => v)
         .map(([k]) => k);
-    fetchPost("/api/backup/global/restore", { name: snapshotName, components }, () => {
-        // Reload regardless of response — DB is replaced, session invalidated
-        window.location.reload();
-    });
-    // Safety: if fetchPost never calls back (timeout), reload after 5 seconds
-    setTimeout(() => { window.location.reload(); }, 5000);
+    fetchPost("/api/backup/global/restore", { name: snapshotName, components }, () => {});
+    // Start polling for progress
+    pollRestoreStatus();
 }
 
 function typeBadgeClass(type) {
@@ -436,7 +460,7 @@ onMounted(() => {
             </button>
 
             <span class="text-body-secondary" :style="{ fontSize: 'var(--density-font, 0.875rem)' }">
-                {{ backups.length }} <LocaleText t="backups"></LocaleText>
+                {{ regularBackups.length }} <LocaleText t="backups"></LocaleText>
             </span>
 
             <!-- Filter pills -->
@@ -473,7 +497,7 @@ onMounted(() => {
                         <span class="spinner-border spinner-border-sm me-2"></span>
                         <LocaleText t="Loading backups..."></LocaleText>
                     </div>
-                    <div v-else-if="filteredBackups.length === 0" class="text-center py-5 text-body-secondary">
+                    <div v-else-if="regularBackups.length === 0" class="text-center py-5 text-body-secondary">
                         <i class="bi bi-inbox fs-2 d-block mb-2"></i>
                         <LocaleText t="No backups found"></LocaleText>
                     </div>
@@ -489,7 +513,7 @@ onMounted(() => {
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr v-for="b in filteredBackups" :key="b.name">
+                                <tr v-for="b in regularBackups" :key="b.name">
                                     <td class="ps-3">
                                         <span v-if="b.name === lastRestoredName" class="badge rounded-circle bg-success me-1 p-1" title="Last restored" style="width:8px;height:8px;display:inline-block"></span>
                                         <samp style="font-size: 0.8em">{{ b.name }}</samp>
@@ -517,6 +541,45 @@ onMounted(() => {
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+
+                    <!-- Restore Points sub-section -->
+                    <div v-if="restorePoints.length > 0" class="px-3 pb-3 mt-2">
+                        <button class="btn btn-sm btn-outline-secondary rounded-3 mb-2"
+                                @click="showRestorePoints = !showRestorePoints">
+                            <i class="bi bi-shield-check me-1"></i>
+                            Restore Points ({{ restorePoints.length }})
+                            <i class="bi ms-1" :class="showRestorePoints ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+                        </button>
+                        <div v-if="showRestorePoints">
+                            <table class="table table-sm mb-0" style="font-size: var(--density-font-sm, 0.8rem)">
+                                <thead>
+                                    <tr class="text-body-secondary">
+                                        <th>Name</th>
+                                        <th>Date</th>
+                                        <th>Details</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="b in restorePoints" :key="b.name">
+                                        <td>
+                                            <span v-if="b.name === lastRestoredName" class="badge rounded-circle bg-success me-1 p-1" style="width:8px;height:8px;display:inline-block"></span>
+                                            <samp style="font-size:0.8em">{{ b.name }}</samp>
+                                        </td>
+                                        <td class="text-body-secondary">{{ formatDate(b.date) }}</td>
+                                        <td class="text-body-secondary"><small>{{ b.event }}</small></td>
+                                        <td class="text-end">
+                                            <div class="btn-group btn-group-sm">
+                                                <button class="btn btn-outline-secondary btn-sm rounded-start-2" @click="downloadBackup(b.name)"><i class="bi bi-download"></i></button>
+                                                <button class="btn btn-outline-primary btn-sm" @click="openRestoreModal(b)"><i class="bi bi-arrow-counterclockwise"></i></button>
+                                                <button class="btn btn-outline-danger btn-sm rounded-end-2" @click="deleteBackup(b.name)"><i class="bi bi-trash"></i></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -746,16 +809,30 @@ onMounted(() => {
                                 <LocaleText t="Cancel"></LocaleText>
                             </button>
                             <button type="button" class="btn btn-sm btn-primary rounded-3" @click="doRestore" :disabled="restoreSelectedCount === 0 || restoring">
-                                <span v-if="restoring" class="spinner-border spinner-border-sm me-1"></span>
-                                <i v-else class="bi bi-arrow-counterclockwise me-1"></i>
-                                <template v-if="restoring"><LocaleText t="Restoring..."></LocaleText></template>
-                                <template v-else><LocaleText t="Restore Selected"></LocaleText> ({{ restoreSelectedCount }})</template>
+                                <i class="bi bi-arrow-counterclockwise me-1"></i>
+                                <LocaleText t="Restore Selected"></LocaleText> ({{ restoreSelectedCount }})
                             </button>
                         </div>
                     </div>
                 </div>
             </div>
         </Transition>
+
+        <!-- ── 6. Restore Progress Bar ─────────────────────────────────────── -->
+        <div v-if="restoring" class="card rounded-3 mt-3">
+            <div class="card-body text-center py-4">
+                <h6 class="mb-3"><i class="bi bi-arrow-counterclockwise me-2"></i>Restoring...</h6>
+                <div class="progress rounded-3 mb-2" style="height: 8px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated"
+                         :style="{ width: (restoreProgress.total > 0 ? (restoreProgress.progress / restoreProgress.total * 100) : 0) + '%' }">
+                    </div>
+                </div>
+                <small class="text-body-secondary">{{ restoreProgress.step || 'Starting...' }}</small>
+                <small class="text-body-secondary d-block mt-1" v-if="restoreProgress.progress">
+                    Step {{ restoreProgress.progress }} of {{ restoreProgress.total }}
+                </small>
+            </div>
+        </div>
 
     </div>
 </template>

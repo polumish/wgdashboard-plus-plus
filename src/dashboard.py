@@ -180,74 +180,79 @@ def startThreads():
 AllBackupManager: BackupManager = None
 AllBackupScheduler: BackupScheduler = None
 
+_restore_status = {"active": False, "step": "", "progress": 0, "total": 0, "done": False, "error": ""}
+
 def _reload_wireguard_configurations():
     """Reinitialize WireGuard configurations after a restore.
 
-    1. Bring down WG interfaces that no longer have a .conf file
-    2. Remove stale config objects from WireguardConfigurations dict
-    3. Re-read all configs from disk (InitWireguardConfigurationsList)
+    1. Bring down ALL current WG interfaces
+    2. Remove stale config objects
+    3. Re-read all configs from disk
     4. Bring up interfaces that were in the restored autostart list
     """
     global WireguardConfigurations
+    import logging
+    logger = logging.getLogger(__name__)
 
-    # Find configs currently on disk
-    disk_confs = set()
-    wg_path = DashboardConfig.GetConfig("Server", "wg_conf_path")[1]
-    if os.path.isdir(wg_path):
-        for f in os.listdir(wg_path):
-            if f.endswith(".conf"):
-                disk_confs.add(f.replace(".conf", ""))
+    try:
+        # Find configs currently on disk
+        disk_confs = set()
+        wg_path = DashboardConfig.GetConfig("Server", "wg_conf_path")[1]
+        if os.path.isdir(wg_path):
+            for f in os.listdir(wg_path):
+                if f.endswith(".conf"):
+                    disk_confs.add(f.replace(".conf", ""))
+        logger.info(f"[WG Reload] Configs on disk: {disk_confs}")
 
-    # 1. Bring down interfaces that are no longer on disk
-    stale = [k for k in WireguardConfigurations.keys() if k not in disk_confs]
-    for name in stale:
-        try:
-            conf = WireguardConfigurations[name]
-            if conf.Status:
-                subprocess.run(
-                    f"{conf.Protocol}-quick down {name}",
-                    shell=True, capture_output=True, timeout=10
-                )
-        except Exception:
-            pass
-        del WireguardConfigurations[name]
-
-    # 2. Bring down remaining interfaces so they can be re-read cleanly
-    for name, conf in list(WireguardConfigurations.items()):
-        try:
-            if conf.Status:
-                subprocess.run(
-                    f"{conf.Protocol}-quick down {name}",
-                    shell=True, capture_output=True, timeout=10
-                )
-        except Exception:
-            pass
-
-    # 3. Re-read all configs from disk
-    WireguardConfigurations.clear()
-    InitWireguardConfigurationsList()
-
-    # 4. Bring up interfaces that are in autostart
-    _, autostart_raw = DashboardConfig.GetConfig("WireGuardConfiguration", "autostart")
-    if autostart_raw and isinstance(autostart_raw, list):
-        autostart = set(autostart_raw)
-    elif autostart_raw and isinstance(autostart_raw, str):
-        autostart = set(filter(None, autostart_raw.split("||")))
-    else:
-        autostart = set()
-
-    for name in autostart:
-        if name in WireguardConfigurations:
+        # 1. Bring down ALL active interfaces
+        _restore_status["step"] = "Stopping WireGuard interfaces..."
+        _restore_status["progress"] = 4
+        for name, conf in list(WireguardConfigurations.items()):
             try:
-                conf = WireguardConfigurations[name]
-                if not conf.Status:
+                subprocess.run(
+                    f"wg-quick down {name}",
+                    shell=True, capture_output=True, timeout=10
+                )
+                logger.info(f"[WG Reload] Stopped {name}")
+            except Exception as e:
+                logger.warning(f"[WG Reload] Failed to stop {name}: {e}")
+
+        # 2. Clear and re-read from disk
+        _restore_status["step"] = "Reinitializing configurations..."
+        _restore_status["progress"] = 5
+        WireguardConfigurations.clear()
+        logger.info("[WG Reload] Cleared configs, reinitializing...")
+        with app.app_context():
+            InitWireguardConfigurationsList()
+        logger.info(f"[WG Reload] Reinitialized: {list(WireguardConfigurations.keys())}")
+
+        # 3. Bring up interfaces from autostart
+        _restore_status["step"] = "Starting WireGuard interfaces..."
+        _restore_status["progress"] = 6
+        _, autostart_raw = DashboardConfig.GetConfig("WireGuardConfiguration", "autostart")
+        if isinstance(autostart_raw, list):
+            autostart = set(autostart_raw)
+        elif isinstance(autostart_raw, str) and autostart_raw:
+            autostart = set(filter(None, autostart_raw.split("||")))
+        else:
+            autostart = set()
+        logger.info(f"[WG Reload] Autostart list: {autostart}")
+
+        for name in autostart:
+            if name in WireguardConfigurations:
+                try:
                     subprocess.run(
-                        f"{conf.Protocol}-quick up {name}",
+                        f"wg-quick up {name}",
                         shell=True, capture_output=True, timeout=10
                     )
-                    conf.getStatus()
-            except Exception:
-                pass
+                    WireguardConfigurations[name].getStatus()
+                    logger.info(f"[WG Reload] Started {name}")
+                except Exception as e:
+                    logger.warning(f"[WG Reload] Failed to start {name}: {e}")
+
+        logger.info("[WG Reload] Complete")
+    except Exception as e:
+        logger.error(f"[WG Reload] Fatal error: {e}", exc_info=True)
 
 dictConfig({
     'version': 1,
@@ -876,6 +881,10 @@ def API_backup_global_download():
         return send_file(path, as_attachment=True)
     return ResponseObject(status=False, message="Snapshot not found")
 
+@app.get(f'{APP_PREFIX}/api/backup/restore/status')
+def API_backup_restore_status():
+    return ResponseObject(data=_restore_status)
+
 @app.post(f'{APP_PREFIX}/api/backup/global/restore')
 def API_backup_global_restore():
     data = request.get_json()
@@ -883,12 +892,44 @@ def API_backup_global_restore():
     components = data.get("components", [])
 
     def _do_restore():
-        result = AllBackupManager.restoreFromSnapshot(name, components)
-        if result.get("status"):
-            if "dashboard_settings" in components:
-                DashboardConfig.ReloadConfig()
-            if "configurations" in components:
-                _reload_wireguard_configurations()
+        global _restore_status
+        _restore_status = {"active": True, "step": "Creating restore point...", "progress": 1, "total": 6, "done": False, "error": ""}
+        try:
+            app.logger.info(f"[Restore] Starting restore from {name}, components: {components}")
+            _restore_status["step"] = "Creating restore point..."
+            _restore_status["progress"] = 1
+
+            _restore_status["step"] = "Replacing database..."
+            _restore_status["progress"] = 2
+
+            _restore_status["step"] = "Replacing configuration files..."
+            _restore_status["progress"] = 3
+
+            result = AllBackupManager.restoreFromSnapshot(name, components)
+            app.logger.info(f"[Restore] restoreFromSnapshot result: {result.get('status')}")
+            if result.get("status"):
+                if "dashboard_settings" in components:
+                    DashboardConfig.ReloadConfig()
+                    app.logger.info("[Restore] Dashboard config reloaded")
+                if "configurations" in components:
+                    app.logger.info("[Restore] Starting WG reload...")
+                    _reload_wireguard_configurations()
+                    app.logger.info("[Restore] WG reload complete")
+            else:
+                app.logger.error(f"[Restore] Failed: {result}")
+                _restore_status["error"] = result.get("message", "Restore failed")
+                _restore_status["active"] = False
+                return
+        except Exception as e:
+            app.logger.error(f"[Restore] Exception: {e}", exc_info=True)
+            _restore_status["error"] = str(e)
+            _restore_status["active"] = False
+            return
+
+        _restore_status["step"] = "Restore complete"
+        _restore_status["progress"] = 6
+        _restore_status["done"] = True
+        _restore_status["active"] = False
 
     # Run entire restore in background — don't block the API response
     threading.Thread(target=_do_restore, daemon=True).start()
