@@ -1058,6 +1058,31 @@ def API_SSE_Diagnostics():
     return app.response_class(generate(), mimetype='text/event-stream',
                               headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
+@app.get(f'{APP_PREFIX}/api/diagnostics')
+def API_Diagnostics():
+    """Full diagnostics snapshot — all interfaces or a single one."""
+    iface = request.args.get('interface', None)
+    result = {}
+    for name in ([iface] if iface else WireguardConfigurations.keys()):
+        if name in AllDiagnosticsMonitor._last_state:
+            result[name] = json.loads(AllDiagnosticsMonitor._last_state[name])
+    return ResponseObject(data={"interfaces": result, "timestamp": int(time.time())})
+
+@app.get(f'{APP_PREFIX}/api/diagnostics/warnings')
+def API_DiagnosticsWarnings():
+    """All warnings across all interfaces."""
+    all_warnings = []
+    for name, state_json in AllDiagnosticsMonitor._last_state.items():
+        state = json.loads(state_json)
+        for w in state.get("warnings", []):
+            w["interface"] = name
+            all_warnings.append(w)
+    return ResponseObject(data={
+        "warnings": all_warnings,
+        "count": len(all_warnings),
+        "timestamp": int(time.time())
+    })
+
 @app.get(f'{APP_PREFIX}/api/getDashboardConfiguration')
 def API_getDashboardConfiguration():
     return ResponseObject(data=DashboardConfig.toJson())
