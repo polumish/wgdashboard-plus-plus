@@ -934,7 +934,8 @@ def API_backup_global_restore():
                 if "configurations" in components:
                     app.logger.info("[Restore] Starting WG reload...")
                     _reload_wireguard_configurations()
-                    app.logger.info("[Restore] WG reload complete")
+                    AllPolicyRouting.sync_all()
+                    app.logger.info("[Restore] WG reload + policy routes complete")
             else:
                 app.logger.error(f"[Restore] Failed: {result}")
                 _restore_status["error"] = result.get("message", "Restore failed")
@@ -991,6 +992,7 @@ def API_backup_config_restore():
         result = AllBackupManager.restoreConfigBackup(config_name, name)
         if result.get("status"):
             _reload_wireguard_configurations()
+            AllPolicyRouting.sync_all()
 
     threading.Thread(target=_do_config_restore, daemon=True).start()
     return ResponseObject(status=True, message="Restore started")
