@@ -43,6 +43,7 @@ from modules.DashboardWebHooks import DashboardWebHooks
 from modules.NewConfigurationTemplates import NewConfigurationTemplates
 from modules.BackupManager import BackupManager
 from modules.BackupScheduler import BackupScheduler
+from modules.PolicyRoutingManager import PolicyRoutingManager
 from modules.BackupMigration import migrate_legacy_backups
 
 class CustomJsonEncoder(DefaultJSONProvider):
@@ -187,6 +188,7 @@ def startThreads():
 
 AllBackupManager: BackupManager = None
 AllBackupScheduler: BackupScheduler = None
+AllPolicyRouting: PolicyRoutingManager = PolicyRoutingManager()
 AllDiagnosticsMonitor = DiagnosticsMonitor()
 
 _restore_status = {"active": False, "step": "", "progress": 0, "total": 0, "done": False, "error": ""}
@@ -336,6 +338,9 @@ with app.app_context():
 
     AllBackupScheduler = BackupScheduler(AllBackupManager, DashboardConfig)
     AllBackupScheduler.start()
+    AllPolicyRouting.init(lambda: WireguardConfigurations)
+    AllPolicyRouting.sync_all()
+    app.logger.info("PolicyRoutingManager initialized and synced")
 
 _, APP_PREFIX = DashboardConfig.GetConfig("Server", "app_prefix")
 cors = CORS(app, resources={rf"{APP_PREFIX}/api/*": {
@@ -1501,7 +1506,7 @@ def _syncGatewaySubnetsToConfig(wc):
         # Full tunnel — override stays 0.0.0.0/0, don't touch
         return '0.0.0.0/0'
     if mode == 'mesh':
-        tunnelSubnet = _configSubnetForPolicy(wc)
+        tunnelSubnet = AllPolicyRouting._config_subnet(wc)
         if tunnelSubnet:
             lanSubnets.add(tunnelSubnet)
     # point-to-site: no tunnel subnet, only server /32s + gateway LANs
@@ -1512,10 +1517,7 @@ def _syncGatewaySubnetsToConfig(wc):
     wc.configurationInfo.RoutedLANSubnets = lanStr
     wc.storeConfigurationInfo()
     # Apply policy routing live
-    subnet = _configSubnetForPolicy(wc)
-    if subnet and lanSubnets:
-        tableId = _policyRoutingTableId(wc.Name)
-        _applyPolicyRoutesLive(wc.Name, subnet, list(lanSubnets), tableId)
+    AllPolicyRouting.on_gateway_changed(wc.Name)
     return lanStr
 
 
@@ -1643,74 +1645,29 @@ def API_getOPNsenseGatewayData(configName: str):
     })
 
 
-def _policyRoutingTableId(configName: str) -> int:
-    """Deterministic routing table ID 100-252 derived from config name."""
-    import hashlib
-    h = int(hashlib.sha1(configName.encode()).hexdigest(), 16)
-    return 100 + (h % 153)  # 100..252
-
-
-def _configSubnetForPolicy(wc) -> str | None:
-    """Pick the IPv4 /N subnet from wc.Address for source matching."""
-    import ipaddress as _ipaddress
-    for addr in (a.strip() for a in (wc.Address or '').split(',')):
-        if not addr:
-            continue
-        try:
-            iface = _ipaddress.ip_interface(addr)
-            if iface.version == 4:
-                return str(iface.network)
-        except ValueError:
-            continue
-    return None
-
-
-def _applyPolicyRoutesLive(configName: str, subnet: str, lanList: list[str], tableId: int):
-    """Apply ip rule + routes now without touching .conf. Idempotent."""
-    import subprocess
-    # Flush previous state for this table
-    subprocess.run(['ip', 'route', 'flush', 'table', str(tableId)],
-                   capture_output=True, text=True)
-    # Remove any existing rule for this source
-    while True:
-        res = subprocess.run(['ip', 'rule', 'del', 'from', subnet, 'table', str(tableId)],
-                             capture_output=True, text=True)
-        if res.returncode != 0:
-            break
-    if not lanList and not subnet:
-        return True, "Policy routes cleared"
-    # Add rule
-    subprocess.run(['ip', 'rule', 'add', 'from', subnet, 'table', str(tableId), 'priority', '100'],
-                   capture_output=True, text=True)
-    # Add routes in the custom table
-    subprocess.run(['ip', 'route', 'add', subnet, 'dev', configName, 'table', str(tableId)],
-                   capture_output=True, text=True)
-    for lan in lanList:
-        subprocess.run(['ip', 'route', 'add', lan, 'dev', configName, 'table', str(tableId)],
-                       capture_output=True, text=True)
-    return True, f"Applied: rule from {subnet} → table {tableId}, {len(lanList)} LAN subnets via {configName}"
-
-
 @app.post(f'{APP_PREFIX}/api/applyPolicyRoutes/<configName>')
 def API_applyPolicyRoutes(configName: str):
-    """Apply policy-routing for this config based on its RoutedLANSubnets info.
-    Reads current saved value from configurationInfo and pushes ip rule/routes."""
+    """Manually trigger policy routing rebuild for this config."""
     if configName not in WireguardConfigurations:
         return ResponseObject(False, "Configuration does not exist")
-    wc = WireguardConfigurations[configName]
-    raw = (wc.configurationInfo.RoutedLANSubnets or '').strip()
-    lanList = [s.strip() for s in raw.split(',') if s.strip()] if raw else []
-    subnet = _configSubnetForPolicy(wc)
-    if not subnet:
-        return ResponseObject(False, "Could not determine IPv4 subnet for this config")
-    tableId = _policyRoutingTableId(configName)
-    ok, msg = _applyPolicyRoutesLive(configName, subnet, lanList, tableId)
-    if ok:
-        return ResponseObject(True, msg, data={
-            "tableId": tableId, "subnet": subnet, "lanSubnets": lanList,
-            "configName": configName
-        })
-    return ResponseObject(False, msg)
+    AllPolicyRouting.on_gateway_changed(configName)
+    return ResponseObject(True, "Policy routes applied", data={
+        "rules": AllPolicyRouting.get_status_for_config(configName)
+    })
+
+
+@app.get(f'{APP_PREFIX}/api/policyRouting/status')
+def API_policyRoutingStatus():
+    """Return all policy routing rules across all interfaces."""
+    return ResponseObject(data=AllPolicyRouting.get_status())
+
+
+@app.get(f'{APP_PREFIX}/api/policyRouting/status/<configName>')
+def API_policyRoutingStatusConfig(configName: str):
+    """Return policy routing rules for one interface."""
+    if configName not in WireguardConfigurations:
+        return ResponseObject(False, "Configuration does not exist")
+    return ResponseObject(data=AllPolicyRouting.get_status_for_config(configName))
 
 
 @app.post(f'{APP_PREFIX}/api/setOpnsenseListenPort/<configName>')
@@ -1793,7 +1750,7 @@ def API_addPeers(configName):
                 except (ValueError, Exception):
                     _configDefaultEAIP = _addr
             else:  # mesh
-                _configDefaultEAIP = _configSubnetForPolicy(_wc) or DashboardConfig.GetConfig("Peers", "peer_endpoint_allowed_ip")[1]
+                _configDefaultEAIP = AllPolicyRouting._config_subnet(_wc) or DashboardConfig.GetConfig("Peers", "peer_endpoint_allowed_ip")[1]
             endpoint_allowed_ip: str = data.get('endpoint_allowed_ip', _configDefaultEAIP)
             if endpoint_allowed_ip == '0.0.0.0/0' and _mode != 'gateway':
                 endpoint_allowed_ip = _configDefaultEAIP
