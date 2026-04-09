@@ -335,9 +335,9 @@ export default {
 						<LocaleText t="Listen Port"></LocaleText>
 					</div>
 					<div class="card-body">
-						<input type="number" class="form-control" placeholder="0-65353" id="ListenPort" 
+						<input type="number" class="form-control" placeholder="0-65535" id="ListenPort" 
 						       min="1"
-						       max="65353"
+						       max="65535"
 						       v-model="this.newConfiguration.ListenPort"
 						       :disabled="this.loading"
 						       required>

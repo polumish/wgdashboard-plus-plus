@@ -56,7 +56,7 @@ const validatePrivateKey = computed(() => {
 
 const validateListenPort = computed(() => {
 	return newConfiguration.ListenPort > 0 
-		&& newConfiguration.ListenPort <= 65353 
+		&& newConfiguration.ListenPort <= 65535 
 		&& Number.isInteger(newConfiguration.ListenPort) 
 		&& !store.Configurations.find(x => parseInt(x.ListenPort) === newConfiguration.ListenPort)
 })
@@ -201,9 +201,9 @@ const submitRestore = async () => {
 			<label class="text-muted mb-1" for="ListenPort"><small>
 				<LocaleText t="Listen Port"></LocaleText>
 			</small></label>
-			<input type="number" class="form-control rounded-3" placeholder="0-65353" id="ListenPort"
+			<input type="number" class="form-control rounded-3" placeholder="0-65535" id="ListenPort"
 			       min="1"
-			       max="65353"
+			       max="65535"
 			       v-model="newConfiguration.ListenPort"
 			       :class="[validateListenPort ? 'is-valid':'is-invalid']"
 			       disabled
