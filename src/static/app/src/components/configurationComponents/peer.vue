@@ -49,10 +49,14 @@ export default {
 		getDropup(){
 			return this.searchPeersLength - this.order <= 3
 		},
+		peerPolicyRoutes(){
+			if (!this.policyRoutes || !(this.Peer.is_gateway === true || this.Peer.is_gateway === 1)) return []
+			const peerNets = (this.Peer.allowed_ip || '').split(',').map(s => s.trim()).filter(Boolean)
+			return this.policyRoutes.filter(r => peerNets.some(net => net === r.dest_subnet || r.dest_subnet.startsWith(net.split('/')[0])))
+		},
 		policyRouteStatus(){
-			if (!this.policyRoutes || !(this.Peer.is_gateway === true || this.Peer.is_gateway === 1)) return null
-			if (this.policyRoutes.length === 0) return null
-			return this.policyRoutes.some(r => r.active) ? 'active' : 'inactive'
+			if (this.peerPolicyRoutes.length === 0) return null
+			return this.peerPolicyRoutes.some(r => r.active) ? 'active' : 'inactive'
 		}
 	}
 }
@@ -131,7 +135,7 @@ export default {
 									</tr>
 								</thead>
 								<tbody>
-									<tr v-for="rule in policyRoutes" :key="rule.dest_subnet">
+									<tr v-for="rule in peerPolicyRoutes" :key="rule.dest_subnet">
 										<td><code>{{ rule.source_subnet }}</code></td>
 										<td><code>{{ rule.dest_subnet }}</code></td>
 										<td>{{ rule.table_id }}</td>

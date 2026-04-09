@@ -32,9 +32,14 @@ const configurationPeers = ref([])
 const policyRoutes = ref([])
 const policyRouteModalOpen = ref(false)
 const policyRoutePos = ref({x: 0, y: 0})
-function openPolicyRouteModal(event) {
+const policyRouteFiltered = ref([])
+function openPolicyRouteModal(event, peer) {
 	const rect = event.target.getBoundingClientRect()
 	policyRoutePos.value = {x: rect.left, y: rect.bottom + 4}
+	const peerNets = (peer.allowed_ip || '').split(',').map(s => s.trim()).filter(Boolean)
+	policyRouteFiltered.value = policyRoutes.value.filter(r =>
+		peerNets.some(net => net === r.dest_subnet || r.dest_subnet.startsWith(net.split('/')[0]))
+	)
 	policyRouteModalOpen.value = true
 }
 const configurationToggling = ref(false)
@@ -518,7 +523,7 @@ watch(() => route.query.id, (newValue) => {
 									<span class="badge rounded-3 me-1"
 										:class="policyRoutes.some(r => r.active) ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'"
 										style="font-size: 0.65rem; cursor: pointer;"
-										@click.stop.prevent="openPolicyRouteModal($event)">
+										@click.stop.prevent="openPolicyRouteModal($event, peer)">
 										<i class="bi bi-diagram-3"></i> Route
 									</span>
 								</template>
@@ -601,7 +606,7 @@ watch(() => route.query.id, (newValue) => {
 										<span class="badge rounded-3 me-1"
 											:class="policyRoutes.some(r => r.active) ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'"
 											style="font-size: 0.62rem; cursor: pointer;"
-											@click.stop.prevent="openPolicyRouteModal($event)">
+											@click.stop.prevent="openPolicyRouteModal($event, peer)">
 											<i class="bi bi-diagram-3"></i> Route
 										</span>
 									</template>
@@ -761,7 +766,7 @@ watch(() => route.query.id, (newValue) => {
 					<button type="button" class="btn-close ms-auto" style="font-size: 0.6rem;"
 						@click="policyRouteModalOpen = false"></button>
 				</div>
-				<table v-if="policyRoutes.length" class="table table-sm mb-0" style="font-size: 0.8rem;">
+				<table v-if="policyRouteFiltered.length" class="table table-sm mb-0" style="font-size: 0.8rem;">
 					<thead>
 						<tr class="text-body-secondary">
 							<th>Source</th>
@@ -772,7 +777,7 @@ watch(() => route.query.id, (newValue) => {
 						</tr>
 					</thead>
 					<tbody>
-						<tr v-for="rule in policyRoutes" :key="rule.config_name + rule.dest_subnet">
+						<tr v-for="rule in policyRouteFiltered" :key="rule.config_name + rule.dest_subnet">
 							<td><code>{{ rule.source_subnet }}</code></td>
 							<td><code>{{ rule.dest_subnet }}</code></td>
 							<td>{{ rule.device }}</td>
