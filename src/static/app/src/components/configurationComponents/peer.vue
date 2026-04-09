@@ -20,11 +20,16 @@ export default {
 	setup(){
 		const target = ref(null);
 		const subMenuOpened = ref(false)
+		const routePopoverOpen = ref(false)
+		const routePopoverRef = ref(null)
 		const dashboardStore = DashboardConfigurationStore()
 		onClickOutside(target, event => {
 			subMenuOpened.value = false;
 		});
-		return {target, subMenuOpened, dashboardStore}
+		onClickOutside(routePopoverRef, event => {
+			routePopoverOpen.value = false;
+		});
+		return {target, subMenuOpened, dashboardStore, routePopoverOpen, routePopoverRef}
 	},
 	computed: {
 		getLatestHandshake(){
@@ -92,11 +97,45 @@ export default {
 				<span v-else-if="Peer.is_gateway === 2" class="badge bg-success-subtle text-success-emphasis rounded-3 me-1" title="Server">
 					<i class="bi bi-hdd-rack"></i> SRV
 				</span>
-				<span v-if="policyRouteStatus === 'active'" class="badge bg-success-subtle text-success-emphasis rounded-3 me-1" title="Policy route active">
-					<i class="bi bi-signpost-split"></i> Route
-				</span>
-				<span v-else-if="policyRouteStatus === 'inactive'" class="badge bg-secondary-subtle text-secondary-emphasis rounded-3 me-1" title="Policy route inactive">
-					<i class="bi bi-signpost-split"></i> Route
+				<span v-if="policyRouteStatus" class="position-relative d-inline-block">
+					<span role="button"
+						@click.stop="routePopoverOpen = !routePopoverOpen"
+						class="badge rounded-3 me-1"
+						:class="policyRouteStatus === 'active' ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'"
+						:title="'Policy route ' + policyRouteStatus + ' — click for details'">
+						<i class="bi bi-signpost-split"></i> Route
+					</span>
+					<Transition name="fade">
+						<div v-if="routePopoverOpen" ref="routePopoverRef"
+							class="policy-route-popover position-absolute shadow rounded-3 p-2"
+							style="z-index: 1050; min-width: 280px; left: 0; top: 100%;">
+							<div class="d-flex align-items-center mb-2">
+								<small class="fw-bold"><i class="bi bi-signpost-split me-1"></i>Policy Routes</small>
+								<button class="btn btn-sm btn-close ms-auto" @click.stop="routePopoverOpen = false" style="font-size: 0.5rem;"></button>
+							</div>
+							<table class="table table-sm table-borderless mb-0" style="font-size: 0.75rem;">
+								<thead>
+									<tr class="text-muted">
+										<th class="py-0">Source</th>
+										<th class="py-0">Destination</th>
+										<th class="py-0">Table</th>
+										<th class="py-0"></th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr v-for="rule in policyRoutes" :key="rule.dest_subnet">
+										<td class="py-0"><code>{{ rule.source_subnet }}</code></td>
+										<td class="py-0"><code>{{ rule.dest_subnet }}</code></td>
+										<td class="py-0">{{ rule.table_id }}</td>
+										<td class="py-0">
+											<span v-if="rule.active" class="text-success"><i class="bi bi-check-circle-fill"></i></span>
+											<span v-else class="text-secondary"><i class="bi bi-dash-circle"></i></span>
+										</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+					</Transition>
 				</span>
 				{{Peer.name ? Peer.name : GetLocale('Untitled Peer')}}
 			</h6>
@@ -175,5 +214,17 @@ export default {
 .server-card{
 	border-left: 3px solid var(--bs-success) !important;
 	background-color: rgba(25, 135, 84, 0.03);
+}
+
+.policy-route-popover{
+	background-color: var(--bs-body-bg);
+	border: 1px solid var(--bs-border-color);
+}
+
+.fade-enter-active, .fade-leave-active {
+	transition: opacity 0.15s ease;
+}
+.fade-enter-from, .fade-leave-to {
+	opacity: 0;
 }
 </style>

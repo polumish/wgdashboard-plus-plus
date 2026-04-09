@@ -508,12 +508,16 @@ watch(() => route.query.id, (newValue) => {
 									<i class="bi bi-hdd-rack"></i> SRV
 								</span>
 								<template v-if="(peer.is_gateway === true || peer.is_gateway === 1) && policyRoutes.length > 0 && policyRoutes.some(r => r.active)">
-									<span class="badge bg-success-subtle text-success-emphasis rounded-3 me-1" title="Policy route active" style="font-size: 0.65rem;">
+									<span class="badge bg-success-subtle text-success-emphasis rounded-3 me-1"
+										:title="'Policy routes:\n' + policyRoutes.map(r => r.source_subnet + ' → ' + r.dest_subnet + ' (table ' + r.table_id + ')').join('\n')"
+										style="font-size: 0.65rem; cursor: help;">
 										<i class="bi bi-signpost-split"></i> Route
 									</span>
 								</template>
 								<template v-else-if="(peer.is_gateway === true || peer.is_gateway === 1) && policyRoutes.length > 0">
-									<span class="badge bg-secondary-subtle text-secondary-emphasis rounded-3 me-1" title="Policy route inactive" style="font-size: 0.65rem;">
+									<span class="badge bg-secondary-subtle text-secondary-emphasis rounded-3 me-1"
+										:title="'Policy routes (inactive):\n' + policyRoutes.map(r => r.source_subnet + ' → ' + r.dest_subnet + ' (table ' + r.table_id + ')').join('\n')"
+										style="font-size: 0.65rem; cursor: help;">
 										<i class="bi bi-signpost-split"></i> Route
 									</span>
 								</template>
@@ -593,12 +597,16 @@ watch(() => route.query.id, (newValue) => {
 										<i class="bi bi-hdd-rack"></i> SRV
 									</span>
 									<template v-if="(peer.is_gateway === true || peer.is_gateway === 1) && policyRoutes.length > 0 && policyRoutes.some(r => r.active)">
-										<span class="badge bg-success-subtle text-success-emphasis rounded-3 me-1" title="Policy route active" style="font-size: 0.62rem;">
+										<span class="badge bg-success-subtle text-success-emphasis rounded-3 me-1"
+											:title="'Policy routes:\n' + policyRoutes.map(r => r.source_subnet + ' → ' + r.dest_subnet + ' (table ' + r.table_id + ')').join('\n')"
+											style="font-size: 0.62rem; cursor: help;">
 											<i class="bi bi-signpost-split"></i> Route
 										</span>
 									</template>
 									<template v-else-if="(peer.is_gateway === true || peer.is_gateway === 1) && policyRoutes.length > 0">
-										<span class="badge bg-secondary-subtle text-secondary-emphasis rounded-3 me-1" title="Policy route inactive" style="font-size: 0.62rem;">
+										<span class="badge bg-secondary-subtle text-secondary-emphasis rounded-3 me-1"
+											:title="'Policy routes (inactive):\n' + policyRoutes.map(r => r.source_subnet + ' → ' + r.dest_subnet + ' (table ' + r.table_id + ')').join('\n')"
+											style="font-size: 0.62rem; cursor: help;">
 											<i class="bi bi-signpost-split"></i> Route
 										</span>
 									</template>
