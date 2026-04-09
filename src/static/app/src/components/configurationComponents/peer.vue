@@ -26,7 +26,7 @@ export default {
 		GetLocale,
 		openRoutePopover(event) {
 			const rect = event.target.getBoundingClientRect()
-			this.routePopoverPos = {x: rect.left, y: rect.bottom + 4}
+			this.routePopoverPos = {x: rect.left, y: rect.top}
 			this.routePopoverOpen = !this.routePopoverOpen
 		}
 	},
@@ -118,7 +118,7 @@ export default {
 				<Teleport to="body">
 					<div v-if="routePopoverOpen" class="policy-route-overlay" @mousedown="routePopoverOpen = false">
 						<div class="policy-route-popover shadow-lg rounded-3 p-3" @mousedown.stop
-							:style="{left: routePopoverPos.x + 'px', top: routePopoverPos.y + 'px'}"
+							:style="{left: routePopoverPos.x + 'px', bottom: 'calc(100vh - ' + routePopoverPos.y + 'px + 4px)'}"
 						>
 							<div class="d-flex align-items-center mb-2">
 								<strong style="font-size: 0.85rem;"><i class="bi bi-diagram-3 me-1"></i>Policy Routes</strong>

@@ -35,7 +35,7 @@ const policyRoutePos = ref({x: 0, y: 0})
 const policyRouteFiltered = ref([])
 function openPolicyRouteModal(event, peer) {
 	const rect = event.target.getBoundingClientRect()
-	policyRoutePos.value = {x: rect.left, y: rect.bottom + 4}
+	policyRoutePos.value = {x: rect.left, y: rect.top}
 	const peerNets = (peer.allowed_ip || '').split(',').map(s => s.trim()).filter(Boolean)
 	policyRouteFiltered.value = policyRoutes.value.filter(r =>
 		peerNets.some(net => net === r.dest_subnet || r.dest_subnet.startsWith(net.split('/')[0]))
@@ -759,7 +759,7 @@ watch(() => route.query.id, (newValue) => {
 	<Teleport to="body">
 		<div v-if="policyRouteModalOpen" class="policy-route-overlay" @mousedown="policyRouteModalOpen = false">
 			<div class="policy-route-modal shadow-lg rounded-3 p-3" @mousedown.stop
-				:style="{left: policyRoutePos.x + 'px', top: policyRoutePos.y + 'px'}"
+				:style="{left: policyRoutePos.x + 'px', bottom: 'calc(100vh - ' + policyRoutePos.y + 'px + 4px)'}"
 			>
 				<div class="d-flex align-items-center mb-2">
 					<strong style="font-size: 0.9rem;"><i class="bi bi-diagram-3 me-1"></i>Policy Routes</strong>
