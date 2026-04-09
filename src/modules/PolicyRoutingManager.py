@@ -158,30 +158,27 @@ class PolicyRoutingManager:
             for dest in dest_subnets
         ]
 
-        if is_up:
-            # All subprocess calls OUTSIDE the lock
-            self._run(["ip", "route", "flush", "table", str(table_id)])
+        # Always flush old state first (even if interface is down)
+        self._run(["ip", "route", "flush", "table", str(table_id)])
+        while True:
+            res = self._run(["ip", "rule", "del", "from", source, "table", str(table_id)])
+            if res.returncode != 0:
+                break
 
-            # Remove old rules for this source+table
-            while True:
-                res = self._run(["ip", "rule", "del", "from", source, "table", str(table_id)])
-                if res.returncode != 0:
-                    break
+        if is_up and dest_subnets:
+            # Add own subnet route
+            self._run(["ip", "route", "add", source, "dev", config_name, "table", str(table_id)])
 
-            if dest_subnets:
-                # Add own subnet route
-                self._run(["ip", "route", "add", source, "dev", config_name, "table", str(table_id)])
-
-                # Add per-destination rules and routes
-                for dest in dest_subnets:
-                    self._run([
-                        "ip", "rule", "add", "from", source, "to", dest,
-                        "table", str(table_id), "priority", "100",
-                    ])
-                    self._run([
-                        "ip", "route", "add", dest, "dev", config_name,
-                        "table", str(table_id),
-                    ])
+            # Add per-destination rules and routes
+            for dest in dest_subnets:
+                self._run([
+                    "ip", "rule", "add", "from", source, "to", dest,
+                    "table", str(table_id), "priority", "100",
+                ])
+                self._run([
+                    "ip", "route", "add", dest, "dev", config_name,
+                    "table", str(table_id),
+                ])
 
             logger.info(
                 "apply_rules: %s — table %d, source %s, %d destinations",
