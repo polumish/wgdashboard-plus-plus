@@ -31,6 +31,12 @@ const configurationInfo = ref({})
 const configurationPeers = ref([])
 const policyRoutes = ref([])
 const policyRouteModalOpen = ref(false)
+const policyRoutePos = ref({x: 0, y: 0})
+function openPolicyRouteModal(event) {
+	const rect = event.target.getBoundingClientRect()
+	policyRoutePos.value = {x: rect.left, y: rect.bottom + 4}
+	policyRouteModalOpen.value = true
+}
 const configurationToggling = ref(false)
 const configurationModalSelectedPeer = ref({})
 const tableSortBy = ref('status')
@@ -512,7 +518,7 @@ watch(() => route.query.id, (newValue) => {
 									<span class="badge rounded-3 me-1"
 										:class="policyRoutes.some(r => r.active) ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'"
 										style="font-size: 0.65rem; cursor: pointer;"
-										@click.stop.prevent="policyRouteModalOpen = true">
+										@click.stop.prevent="openPolicyRouteModal($event)">
 										<i class="bi bi-diagram-3"></i> Route
 									</span>
 								</template>
@@ -595,7 +601,7 @@ watch(() => route.query.id, (newValue) => {
 										<span class="badge rounded-3 me-1"
 											:class="policyRoutes.some(r => r.active) ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'"
 											style="font-size: 0.62rem; cursor: pointer;"
-											@click.stop.prevent="policyRouteModalOpen = true">
+											@click.stop.prevent="openPolicyRouteModal($event)">
 											<i class="bi bi-diagram-3"></i> Route
 										</span>
 									</template>
@@ -747,7 +753,9 @@ watch(() => route.query.id, (newValue) => {
 		@loadMore="showPeersCount += showPeersThreshold"></PeerIntersectionObserver>
 	<Teleport to="body">
 		<div v-if="policyRouteModalOpen" class="policy-route-overlay" @mousedown="policyRouteModalOpen = false">
-			<div class="policy-route-modal shadow-lg rounded-3 p-3" @mousedown.stop>
+			<div class="policy-route-modal shadow-lg rounded-3 p-3" @mousedown.stop
+				:style="{left: policyRoutePos.x + 'px', top: policyRoutePos.y + 'px'}"
+			>
 				<div class="d-flex align-items-center mb-2">
 					<strong style="font-size: 0.9rem;"><i class="bi bi-diagram-3 me-1"></i>Policy Routes</strong>
 					<button type="button" class="btn-close ms-auto" style="font-size: 0.6rem;"
@@ -822,16 +830,14 @@ tr.server-row {
 	width: 100vw;
 	height: 100vh;
 	z-index: 1060;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	background: rgba(0,0,0,0.3);
 }
 
 .policy-route-modal{
+	position: fixed;
 	background-color: var(--bs-body-bg);
 	border: 1px solid var(--bs-border-color);
 	min-width: 350px;
 	max-width: 550px;
+	z-index: 1061;
 }
 </style>

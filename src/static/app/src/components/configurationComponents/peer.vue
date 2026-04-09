@@ -10,7 +10,6 @@ import PeerTagBadge from "@/components/configurationComponents/peerTagBadge.vue"
 
 export default {
 	name: "peer",
-	methods: {GetLocale},
 	components: {
 		PeerTagBadge, LocaleText, PeerSettingsDropdown
 	},
@@ -19,7 +18,16 @@ export default {
 	},
 	data(){
 		return {
-			routePopoverOpen: false
+			routePopoverOpen: false,
+			routePopoverPos: {x: 0, y: 0}
+		}
+	},
+	methods: {
+		GetLocale,
+		openRoutePopover(event) {
+			const rect = event.target.getBoundingClientRect()
+			this.routePopoverPos = {x: rect.left, y: rect.bottom + 4}
+			this.routePopoverOpen = !this.routePopoverOpen
 		}
 	},
 	setup(){
@@ -100,12 +108,14 @@ export default {
 				<span v-if="policyRouteStatus"
 					class="badge rounded-3 me-1 policy-route-badge"
 					:class="policyRouteStatus === 'active' ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'"
-					@mousedown.stop.prevent="routePopoverOpen = !routePopoverOpen">
+					@mousedown.stop.prevent="openRoutePopover($event)">
 					<i class="bi bi-diagram-3"></i> Route
 				</span>
 				<Teleport to="body">
 					<div v-if="routePopoverOpen" class="policy-route-overlay" @mousedown="routePopoverOpen = false">
-						<div class="policy-route-popover shadow-lg rounded-3 p-3" @mousedown.stop>
+						<div class="policy-route-popover shadow-lg rounded-3 p-3" @mousedown.stop
+							:style="{left: routePopoverPos.x + 'px', top: routePopoverPos.y + 'px'}"
+						>
 							<div class="d-flex align-items-center mb-2">
 								<strong style="font-size: 0.85rem;"><i class="bi bi-diagram-3 me-1"></i>Policy Routes</strong>
 								<button type="button" class="btn-close ms-auto" style="font-size: 0.6rem;"
@@ -225,16 +235,14 @@ export default {
 	width: 100vw;
 	height: 100vh;
 	z-index: 1060;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	background: rgba(0,0,0,0.3);
 }
 
 .policy-route-popover{
+	position: fixed;
 	background-color: var(--bs-body-bg);
 	border: 1px solid var(--bs-border-color);
 	min-width: 320px;
 	max-width: 500px;
+	z-index: 1061;
 }
 </style>
