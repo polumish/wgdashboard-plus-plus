@@ -160,6 +160,14 @@ class PolicyRoutingManager:
 
         # Always flush old state first (even if interface is down)
         self._run(["ip", "route", "flush", "table", str(table_id)])
+        # Remove old ip rules — must match the exact form they were created with
+        # (including "to <dest>"). Use previously stored rules if available.
+        old_rules = self._rules.get(config_name, [])
+        if old_rules:
+            for rule in old_rules:
+                self._run(["ip", "rule", "del", "from", rule.source_subnet,
+                           "to", rule.dest_subnet, "table", str(rule.table_id)])
+        # Fallback: also try without "to" in case rules were created by old code
         while True:
             res = self._run(["ip", "rule", "del", "from", source, "table", str(table_id)])
             if res.returncode != 0:
@@ -200,6 +208,10 @@ class PolicyRoutingManager:
         table_id = rules[0].table_id
         source = rules[0].source_subnet
         self._run(["ip", "route", "flush", "table", str(table_id)])
+        for rule in rules:
+            self._run(["ip", "rule", "del", "from", rule.source_subnet,
+                       "to", rule.dest_subnet, "table", str(rule.table_id)])
+        # Fallback cleanup
         while True:
             res = self._run(["ip", "rule", "del", "from", source, "table", str(table_id)])
             if res.returncode != 0:
