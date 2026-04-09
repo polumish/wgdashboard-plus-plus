@@ -17,19 +17,19 @@ export default {
 	props: {
 		Peer: Object, ConfigurationInfo: Object, order: Number, searchPeersLength: Number, policyRoutes: Array
 	},
+	data(){
+		return {
+			routePopoverOpen: false
+		}
+	},
 	setup(){
 		const target = ref(null);
 		const subMenuOpened = ref(false)
-		const routePopoverOpen = ref(false)
-		const routePopoverRef = ref(null)
 		const dashboardStore = DashboardConfigurationStore()
 		onClickOutside(target, event => {
 			subMenuOpened.value = false;
 		});
-		onClickOutside(routePopoverRef, event => {
-			routePopoverOpen.value = false;
-		});
-		return {target, subMenuOpened, dashboardStore, routePopoverOpen, routePopoverRef}
+		return {target, subMenuOpened, dashboardStore}
 	},
 	computed: {
 		getLatestHandshake(){
@@ -97,45 +97,45 @@ export default {
 				<span v-else-if="Peer.is_gateway === 2" class="badge bg-success-subtle text-success-emphasis rounded-3 me-1" title="Server">
 					<i class="bi bi-hdd-rack"></i> SRV
 				</span>
-				<span v-if="policyRouteStatus" class="position-relative d-inline-block">
-					<span role="button"
-						@click.stop="routePopoverOpen = !routePopoverOpen"
+				<span v-if="policyRouteStatus" class="position-relative d-inline-block"
+					@click.stop.prevent="routePopoverOpen = !routePopoverOpen"
+					role="button">
+					<span
 						class="badge rounded-3 me-1"
-						:class="policyRouteStatus === 'active' ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'"
-						:title="'Policy route ' + policyRouteStatus + ' — click for details'">
-						<i class="bi bi-signpost-split"></i> Route
+						:class="policyRouteStatus === 'active' ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'">
+						<i class="bi bi-diagram-3"></i> Route
 					</span>
-					<Transition name="fade">
-						<div v-if="routePopoverOpen" ref="routePopoverRef"
-							class="policy-route-popover position-absolute shadow rounded-3 p-2"
-							style="z-index: 1050; min-width: 280px; left: 0; top: 100%;">
-							<div class="d-flex align-items-center mb-2">
-								<small class="fw-bold"><i class="bi bi-signpost-split me-1"></i>Policy Routes</small>
-								<button class="btn btn-sm btn-close ms-auto" @click.stop="routePopoverOpen = false" style="font-size: 0.5rem;"></button>
-							</div>
-							<table class="table table-sm table-borderless mb-0" style="font-size: 0.75rem;">
-								<thead>
-									<tr class="text-muted">
-										<th class="py-0">Source</th>
-										<th class="py-0">Destination</th>
-										<th class="py-0">Table</th>
-										<th class="py-0"></th>
-									</tr>
-								</thead>
-								<tbody>
-									<tr v-for="rule in policyRoutes" :key="rule.dest_subnet">
-										<td class="py-0"><code>{{ rule.source_subnet }}</code></td>
-										<td class="py-0"><code>{{ rule.dest_subnet }}</code></td>
-										<td class="py-0">{{ rule.table_id }}</td>
-										<td class="py-0">
-											<span v-if="rule.active" class="text-success"><i class="bi bi-check-circle-fill"></i></span>
-											<span v-else class="text-secondary"><i class="bi bi-dash-circle"></i></span>
-										</td>
-									</tr>
-								</tbody>
-							</table>
+					<div v-if="routePopoverOpen"
+						class="policy-route-popover position-absolute shadow-lg rounded-3 p-2"
+						@click.stop
+						style="z-index: 1050; min-width: 300px; left: 0; top: calc(100% + 4px);">
+						<div class="d-flex align-items-center mb-2">
+							<small class="fw-bold"><i class="bi bi-diagram-3 me-1"></i>Policy Routes</small>
+							<button type="button" class="btn-close ms-auto" style="font-size: 0.5rem;"
+								@click.stop.prevent="routePopoverOpen = false"></button>
 						</div>
-					</Transition>
+						<table class="table table-sm table-borderless mb-0" style="font-size: 0.75rem;">
+							<thead>
+								<tr class="text-muted">
+									<th class="py-0">Source</th>
+									<th class="py-0">Destination</th>
+									<th class="py-0">Table</th>
+									<th class="py-0"></th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr v-for="rule in policyRoutes" :key="rule.dest_subnet">
+									<td class="py-0"><code>{{ rule.source_subnet }}</code></td>
+									<td class="py-0"><code>{{ rule.dest_subnet }}</code></td>
+									<td class="py-0">{{ rule.table_id }}</td>
+									<td class="py-0">
+										<span v-if="rule.active" class="text-success"><i class="bi bi-check-circle-fill"></i></span>
+										<span v-else class="text-secondary"><i class="bi bi-dash-circle"></i></span>
+									</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
 				</span>
 				{{Peer.name ? Peer.name : GetLocale('Untitled Peer')}}
 			</h6>
