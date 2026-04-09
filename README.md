@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-    <a href="https://github.com/polumish/wgdashboard-plus-plus/releases"><img src="https://img.shields.io/badge/Release_Notes-v1.5.2-brightgreen?style=for-the-badge"></a>
+    <a href="https://github.com/polumish/wgdashboard-plus-plus/releases"><img src="https://img.shields.io/badge/Release_Notes-v1.6.0-brightgreen?style=for-the-badge"></a>
     <a href="https://github.com/polumish/wgdashboard-plus-plus/discussions"><img src="https://img.shields.io/badge/Discussions-welcome-purple?style=for-the-badge&logo=github"></a>
     <a href="https://git.half.net.ua/polumish/wgdashboard-plus-plus/-/issues"><img src="https://img.shields.io/badge/Bug_Reports-welcome-orange?style=for-the-badge&logo=gitlab"></a>
 </p>
@@ -85,7 +85,7 @@ Fit more peers on screen with tight spacing.
 - **Peer counts in sidebar** — connected/total counts next to each configuration
 - **Configurable admin session timeout**
 
-### Network Diagnostics (v1.5.2+)
+### Network Diagnostics (v1.6.0+)
 - **Live diagnostic terminal** — neon-styled real-time view of WireGuard interface health
 - **SSE-powered** — Server-Sent Events push updates instantly when state changes (no polling)
 - **Per-interface diagnostics** — peers, endpoints, handshakes, transfer, system routes in one panel
@@ -125,6 +125,94 @@ Warning types:
 | `peer_inactive` | Peer has never connected |
 | `missing_route` | AllowedIPs entry exists but no kernel route found |
 | `orphan_route` | Kernel route exists but no matching peer AllowedIPs |
+| `policy_route_missing` | Gateway peer exists but no policy routes applied |
+| `policy_route_inactive` | Policy route exists but interface is down |
+
+### Automatic Policy Routing (v1.6.0+)
+
+Source-based (policy) routing for WireGuard interfaces. When multiple WG interfaces have gateway peers pointing to the same destination network (e.g., `10.0.50.0/24`), each interface gets its own routing table so traffic is routed based on source address — peers from each network go through their own tunnel.
+
+#### How It Works
+
+**Automatic behavior — no manual configuration needed:**
+
+1. You add a gateway peer (`is_gateway=1`) to a WG interface and specify the LAN subnets behind it (AllowedIPs)
+2. `PolicyRoutingManager` automatically creates:
+   - A dedicated routing table (100-252) per WG interface
+   - `ip rule` entries matching source subnet → destination subnet → table
+   - `ip route` entries in the dedicated table pointing through the correct WG interface
+3. When the interface goes UP/DOWN, rules are created/cleaned automatically
+4. On Dashboard startup, all rules are rebuilt from scratch (idempotent)
+5. After backup restore, rules are re-synced automatically
+
+**Example:** Two WG interfaces both route to `10.0.50.0/24` via different OPNsense gateways:
+```
+Full-Halfnet (10.200.0.0/24) → 10.0.50.0/24 via table 179
+Tomash       (10.200.1.0/24) → 10.0.50.0/24 via table 216
+```
+Traffic from `10.200.0.x` goes through `Full-Halfnet`, traffic from `10.200.1.x` goes through `Tomash`.
+
+#### What Happens Under the Hood
+
+For each WG interface with gateway peers, the manager runs:
+```bash
+# Flush old state
+ip route flush table <table_id>
+ip rule del from <source> to <dest> table <table_id> priority 100
+
+# Add new rules (one per destination subnet)
+ip rule add from <source_subnet> to <dest_subnet> table <table_id> priority 100
+ip route add <dest_subnet> dev <interface> table <table_id>
+ip route add <source_subnet> dev <interface> table <table_id>
+```
+
+#### UI
+
+- **Badge on gateway peers** — green "Route" badge when policy route is active, grey when inactive
+- **Settings → Policy Routing** — read-only table showing all policy routing rules (source, destination, device, table ID, status)
+- **Network Diagnostics** — warnings for `policy_route_missing` (gateway peer without routes) and `policy_route_inactive` (routes exist but interface is down)
+
+#### Manual Controls
+
+| Action | How |
+|--------|-----|
+| View all policy rules | Settings → Policy Routing tab, or `GET /api/policyRouting/status` |
+| View rules for one interface | `GET /api/policyRouting/status/<configName>` |
+| Force rebuild rules | `POST /api/applyPolicyRoutes/<configName>` |
+| Rules auto-apply on | Interface toggle, gateway peer add/update/delete, dashboard startup, backup restore |
+
+#### Policy Routing API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/policyRouting/status` | GET | All policy routing rules across all interfaces |
+| `/api/policyRouting/status/<configName>` | GET | Rules for a specific interface |
+| `/api/applyPolicyRoutes/<configName>` | POST | Manually rebuild rules for an interface |
+
+Response format:
+```json
+{
+  "status": true,
+  "data": [
+    {
+      "config_name": "Full-Halfnet",
+      "table_id": 179,
+      "source_subnet": "10.200.0.0/24",
+      "dest_subnet": "10.0.50.0/24",
+      "device": "Full-Halfnet",
+      "active": true
+    }
+  ]
+}
+```
+
+#### Technical Details
+
+- **Table ID assignment:** deterministic SHA1 hash of config name → range 100-252, with automatic collision resolution (shift +1)
+- **Thread safety:** subprocess calls run outside the lock, only state mutation is locked
+- **IPv4 only:** IPv6 subnets in AllowedIPs are filtered out (ip rule cannot mix address families)
+- **Legacy migration:** on first startup after upgrade from v1.5.x, old-style ip rules (without `to` clause) are automatically cleaned and replaced with new per-destination rules
+- **Subprocess timeout:** all `ip` commands have a 5-second timeout to prevent hangs
 
 ### UI Improvements
 - **Display density settings** — Compact / Normal / Comfortable (Gmail-style)
@@ -147,7 +235,7 @@ WgDashboard++ uses its own versioning independent of upstream:
 - **Y** — feature releases (+0.1)
 - **Z** — bugfixes (+0.01)
 
-Current: **v1.5.2**
+Current: **v1.6.0**
 
 ## Feature Status
 
@@ -159,6 +247,7 @@ Current: **v1.5.2**
 | OPNsense Gateway integration | Stable |
 | Gateways aggregation view | Stable |
 | Routed LAN Subnets / policy routing | Stable |
+| Automatic Policy Routing (source-based) | Stable (v1.6.0+) |
 | Network Diagnostics (live SSE terminal) | Stable |
 | Docker deployment | Stable |
 
