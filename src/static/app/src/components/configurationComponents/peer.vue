@@ -97,46 +97,44 @@ export default {
 				<span v-else-if="Peer.is_gateway === 2" class="badge bg-success-subtle text-success-emphasis rounded-3 me-1" title="Server">
 					<i class="bi bi-hdd-rack"></i> SRV
 				</span>
-				<span v-if="policyRouteStatus" class="position-relative d-inline-block"
-					@click.stop.prevent="routePopoverOpen = !routePopoverOpen"
-					role="button">
-					<span
-						class="badge rounded-3 me-1"
-						:class="policyRouteStatus === 'active' ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'">
-						<i class="bi bi-diagram-3"></i> Route
-					</span>
-					<div v-if="routePopoverOpen"
-						class="policy-route-popover position-absolute shadow-lg rounded-3 p-2"
-						@click.stop
-						style="z-index: 1050; min-width: 300px; left: 0; top: calc(100% + 4px);">
-						<div class="d-flex align-items-center mb-2">
-							<small class="fw-bold"><i class="bi bi-diagram-3 me-1"></i>Policy Routes</small>
-							<button type="button" class="btn-close ms-auto" style="font-size: 0.5rem;"
-								@click.stop.prevent="routePopoverOpen = false"></button>
-						</div>
-						<table class="table table-sm table-borderless mb-0" style="font-size: 0.75rem;">
-							<thead>
-								<tr class="text-muted">
-									<th class="py-0">Source</th>
-									<th class="py-0">Destination</th>
-									<th class="py-0">Table</th>
-									<th class="py-0"></th>
-								</tr>
-							</thead>
-							<tbody>
-								<tr v-for="rule in policyRoutes" :key="rule.dest_subnet">
-									<td class="py-0"><code>{{ rule.source_subnet }}</code></td>
-									<td class="py-0"><code>{{ rule.dest_subnet }}</code></td>
-									<td class="py-0">{{ rule.table_id }}</td>
-									<td class="py-0">
-										<span v-if="rule.active" class="text-success"><i class="bi bi-check-circle-fill"></i></span>
-										<span v-else class="text-secondary"><i class="bi bi-dash-circle"></i></span>
-									</td>
-								</tr>
-							</tbody>
-						</table>
-					</div>
+				<span v-if="policyRouteStatus"
+					class="badge rounded-3 me-1 policy-route-badge"
+					:class="policyRouteStatus === 'active' ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'"
+					@mousedown.stop.prevent="routePopoverOpen = !routePopoverOpen">
+					<i class="bi bi-diagram-3"></i> Route
 				</span>
+				<Teleport to="body">
+					<div v-if="routePopoverOpen" class="policy-route-overlay" @mousedown="routePopoverOpen = false">
+						<div class="policy-route-popover shadow-lg rounded-3 p-3" @mousedown.stop>
+							<div class="d-flex align-items-center mb-2">
+								<strong style="font-size: 0.85rem;"><i class="bi bi-diagram-3 me-1"></i>Policy Routes</strong>
+								<button type="button" class="btn-close ms-auto" style="font-size: 0.6rem;"
+									@click="routePopoverOpen = false"></button>
+							</div>
+							<table class="table table-sm table-borderless mb-0" style="font-size: 0.8rem;">
+								<thead>
+									<tr class="text-muted">
+										<th>Source</th>
+										<th>Destination</th>
+										<th>Table</th>
+										<th></th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr v-for="rule in policyRoutes" :key="rule.dest_subnet">
+										<td><code>{{ rule.source_subnet }}</code></td>
+										<td><code>{{ rule.dest_subnet }}</code></td>
+										<td>{{ rule.table_id }}</td>
+										<td>
+											<span v-if="rule.active" class="text-success"><i class="bi bi-check-circle-fill"></i></span>
+											<span v-else class="text-secondary"><i class="bi bi-dash-circle"></i></span>
+										</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+					</div>
+				</Teleport>
 				{{Peer.name ? Peer.name : GetLocale('Untitled Peer')}}
 			</h6>
 			<div class="d-flex"
@@ -216,15 +214,27 @@ export default {
 	background-color: rgba(25, 135, 84, 0.03);
 }
 
+.policy-route-badge{
+	cursor: pointer;
+}
+
+.policy-route-overlay{
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100vw;
+	height: 100vh;
+	z-index: 1060;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0,0,0,0.3);
+}
+
 .policy-route-popover{
 	background-color: var(--bs-body-bg);
 	border: 1px solid var(--bs-border-color);
-}
-
-.fade-enter-active, .fade-leave-active {
-	transition: opacity 0.15s ease;
-}
-.fade-enter-from, .fade-leave-to {
-	opacity: 0;
+	min-width: 320px;
+	max-width: 500px;
 }
 </style>
