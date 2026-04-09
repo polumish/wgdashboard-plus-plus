@@ -173,7 +173,7 @@ export default {
 			if (ele){
 				ele.classList.remove("is-invalid", "is-valid")
 
-				if (newVal < 0 || newVal > 65353 || !Number.isInteger(newVal)){
+				if (newVal < 1 || newVal > 65535 || !Number.isInteger(newVal)){
 					ele.classList.add("is-invalid")
 				}else{
 					ele.classList.add("is-valid")

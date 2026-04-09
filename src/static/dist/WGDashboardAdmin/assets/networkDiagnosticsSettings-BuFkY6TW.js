@@ -1,1 +1,0 @@
-import{N as e}from"./NetworkDiagnostics-Dq-Ntt_f.js";import{c as t,b as o,f as a}from"./index-Clulnk9b.js";const l={__name:"networkDiagnosticsSettings",setup(r){return(s,c)=>(a(),t("div",null,[o(e,{mode:"all"})]))}};export{l as default};
