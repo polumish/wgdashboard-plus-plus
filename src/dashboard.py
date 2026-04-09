@@ -556,11 +556,18 @@ def API_suggestNewConfiguration():
             # Use first host-like address: x.x.x.0/24 as WG interface address
             suggestedAddress = f"{subnet.network_address}/{subnet.prefixlen}"
             break
-    # Suggest next free port
+    # Suggest next free port (range 51820-65535, wrap around if needed)
+    suggestedPort = 51820
     if usedPorts:
-        suggestedPort = max(usedPorts) + 1
-    else:
-        suggestedPort = 51820
+        candidate = max(usedPorts) + 1
+        if candidate <= 65535:
+            suggestedPort = candidate
+        else:
+            # Wrapped past max — find first free port from 51820
+            for p in range(51820, 65536):
+                if p not in usedPorts:
+                    suggestedPort = p
+                    break
     return ResponseObject(True, data={
         "address": suggestedAddress,
         "listenPort": suggestedPort,
