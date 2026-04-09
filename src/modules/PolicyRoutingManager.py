@@ -166,7 +166,8 @@ class PolicyRoutingManager:
         if old_rules:
             for rule in old_rules:
                 self._run(["ip", "rule", "del", "from", rule.source_subnet,
-                           "to", rule.dest_subnet, "table", str(rule.table_id)])
+                           "to", rule.dest_subnet, "table", str(rule.table_id),
+                           "priority", "100"])
         # Fallback: also try without "to" in case rules were created by old code
         while True:
             res = self._run(["ip", "rule", "del", "from", source, "table", str(table_id)])
@@ -210,10 +211,12 @@ class PolicyRoutingManager:
         self._run(["ip", "route", "flush", "table", str(table_id)])
         for rule in rules:
             self._run(["ip", "rule", "del", "from", rule.source_subnet,
-                       "to", rule.dest_subnet, "table", str(rule.table_id)])
+                       "to", rule.dest_subnet, "table", str(rule.table_id),
+                       "priority", "100"])
         # Fallback cleanup
         while True:
-            res = self._run(["ip", "rule", "del", "from", source, "table", str(table_id)])
+            res = self._run(["ip", "rule", "del", "from", source, "table", str(table_id),
+                             "priority", "100"])
             if res.returncode != 0:
                 break
         logger.info("remove_rules: %s — cleared table %d", config_name, table_id)
