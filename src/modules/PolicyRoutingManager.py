@@ -31,15 +31,29 @@ class PolicyRoutingManager:
         self._rules: dict[str, list[PolicyRule]] = {}
         self._lock = threading.Lock()
         self._configurations_fn = None  # callable returning WireguardConfigurations dict
+        self._table_id_map: dict[str, int] = {}  # config_name → assigned table_id
 
     def init(self, configurations_fn):
         """Late-init with a callable that returns WireguardConfigurations dict."""
         self._configurations_fn = configurations_fn
 
     def _table_id(self, config_name: str) -> int:
-        """Deterministic routing table ID 100-252 from config name."""
+        """Deterministic routing table ID 100-252, with collision resolution."""
+        if config_name in self._table_id_map:
+            return self._table_id_map[config_name]
+
         h = int(hashlib.sha1(config_name.encode()).hexdigest(), 16)
-        return 100 + (h % 153)
+        candidate = 100 + (h % 153)
+        used = set(self._table_id_map.values())
+
+        while candidate in used:
+            logger.warning("table_id collision: %d already used, shifting +1 for %s", candidate, config_name)
+            candidate += 1
+            if candidate > 252:
+                candidate = 100
+
+        self._table_id_map[config_name] = candidate
+        return candidate
 
     def config_subnet(self, wc) -> str | None:
         """Extract IPv4 network CIDR from wc.Address."""

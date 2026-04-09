@@ -652,6 +652,7 @@ def API_toggleWireguardConfiguration():
             configurationName) == 0 or configurationName not in WireguardConfigurations.keys():
         return ResponseObject(False, "Please provide a valid configuration name", status_code=404)
     toggleStatus, msg = WireguardConfigurations[configurationName].toggleConfiguration()
+    AllPolicyRouting.on_gateway_changed(configurationName)
     return ResponseObject(toggleStatus, msg, WireguardConfigurations[configurationName].Status)
 
 @app.post(f'{APP_PREFIX}/api/updateWireguardConfiguration')
