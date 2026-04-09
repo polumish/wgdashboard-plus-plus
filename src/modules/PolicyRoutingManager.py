@@ -38,13 +38,24 @@ class PolicyRoutingManager:
         self._configurations_fn = configurations_fn
 
     def _table_id(self, config_name: str) -> int:
-        """Deterministic routing table ID 100-252, with collision resolution."""
+        """Deterministic routing table ID 100-252, with collision resolution.
+
+        Thread-safety note: this method reads/writes _table_id_map without
+        the lock. It is safe because callers (apply_rules, sync_all) run
+        sequentially within a single request or startup path. If concurrent
+        access is ever needed, wrap calls in self._lock.
+        """
         if config_name in self._table_id_map:
             return self._table_id_map[config_name]
 
         h = int(hashlib.sha1(config_name.encode()).hexdigest(), 16)
         candidate = 100 + (h % 153)
         used = set(self._table_id_map.values())
+
+        if len(used) >= 153:
+            logger.error("_table_id: all 153 table IDs exhausted, reusing %d for %s", candidate, config_name)
+            self._table_id_map[config_name] = candidate
+            return candidate
 
         while candidate in used:
             logger.warning("table_id collision: %d already used, shifting +1 for %s", candidate, config_name)
@@ -90,6 +101,8 @@ class PolicyRoutingManager:
                     continue
                 try:
                     net = ipaddress.ip_network(part, strict=False)
+                    if net.version != 4:
+                        continue
                     if config_net and net.subnet_of(config_net):
                         continue
                     subnets.append(part)

@@ -69,6 +69,26 @@ class TestTableId:
         ids = {mgr._table_id(n) for n in ["wg0", "wg1", "wg-office"]}
         assert len(ids) == 3, "Expected different table IDs for different configs"
 
+    def test_collision_resolution(self):
+        """Two configs that hash to same value should get different table IDs."""
+        PolicyRoutingManager, _ = _import_manager()
+        mgr = PolicyRoutingManager()
+        # Full-Halfnet and nm-halfnet both hash to 179
+        t1 = mgr._table_id("Full-Halfnet")
+        t2 = mgr._table_id("nm-halfnet")
+        assert t1 != t2, f"Collision not resolved: both got {t1}"
+        assert 100 <= t1 <= 252
+        assert 100 <= t2 <= 252
+
+    def test_collision_resolution_cached(self):
+        """After collision resolution, repeated calls return same ID."""
+        PolicyRoutingManager, _ = _import_manager()
+        mgr = PolicyRoutingManager()
+        t1 = mgr._table_id("Full-Halfnet")
+        t2 = mgr._table_id("nm-halfnet")
+        assert mgr._table_id("Full-Halfnet") == t1
+        assert mgr._table_id("nm-halfnet") == t2
+
 
 class TestConfigSubnet:
 
@@ -307,9 +327,8 @@ class TestGatewayDestSubnets:
         wc.Peers = [gateway]
         subnets = mgr._gateway_dest_subnets(wc)
         assert "10.0.50.0/24" in subnets
-        # fd00::5/128 is within fd00::/64 but we should only compare IPv4
-        # The IPv6 entry should still be included since we can't filter it with IPv4 config_net
-        assert "fd00::5/128" in subnets
+        # IPv6 entries should be filtered out — only IPv4 subnets for ip rule/route
+        assert "fd00::5/128" not in subnets
 
 
 class TestDiagnosticsIntegration:
