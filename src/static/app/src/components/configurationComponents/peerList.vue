@@ -29,6 +29,7 @@ const wireguardConfigurationStore = WireguardConfigurationsStore()
 const route = useRoute()
 const configurationInfo = ref({})
 const configurationPeers = ref([])
+const policyRoutes = ref([])
 const configurationToggling = ref(false)
 const configurationModalSelectedPeer = ref({})
 const tableSortBy = ref('status')
@@ -99,7 +100,7 @@ const fetchPeerList = async () => {
 		if (res.status){
 			configurationInfo.value = res.data.configurationInfo;
 			configurationPeers.value = res.data.configurationPeers;
-			
+
 			configurationPeers.value.forEach(p => {
 				p.restricted = false
 			})
@@ -107,6 +108,11 @@ const fetchPeerList = async () => {
 				x.restricted = true;
 				configurationPeers.value.push(x)
 			})
+		}
+	})
+	fetchGet("/api/policyRouting/status/" + route.params.id, {}, (res) => {
+		if (res.status) {
+			policyRoutes.value = res.data
 		}
 	})
 }
@@ -501,6 +507,16 @@ watch(() => route.query.id, (newValue) => {
 								<span v-else-if="peer.is_gateway === 2" class="badge bg-success-subtle text-success-emphasis rounded-3 me-1" title="Server" style="font-size: 0.65rem;">
 									<i class="bi bi-hdd-rack"></i> SRV
 								</span>
+								<template v-if="(peer.is_gateway === true || peer.is_gateway === 1) && policyRoutes.length > 0 && policyRoutes.some(r => r.active)">
+									<span class="badge bg-success-subtle text-success-emphasis rounded-3 me-1" title="Policy route active" style="font-size: 0.65rem;">
+										<i class="bi bi-signpost-split"></i> Route
+									</span>
+								</template>
+								<template v-else-if="(peer.is_gateway === true || peer.is_gateway === 1) && policyRoutes.length > 0">
+									<span class="badge bg-secondary-subtle text-secondary-emphasis rounded-3 me-1" title="Policy route inactive" style="font-size: 0.65rem;">
+										<i class="bi bi-signpost-split"></i> Route
+									</span>
+								</template>
 								{{ peer.name || 'Untitled' }}
 							</strong>
 						</td>
@@ -576,6 +592,16 @@ watch(() => route.query.id, (newValue) => {
 									<span v-else-if="peer.is_gateway === 2" class="badge bg-success-subtle text-success-emphasis rounded-3 me-1" title="Server" style="font-size: 0.62rem;">
 										<i class="bi bi-hdd-rack"></i> SRV
 									</span>
+									<template v-if="(peer.is_gateway === true || peer.is_gateway === 1) && policyRoutes.length > 0 && policyRoutes.some(r => r.active)">
+										<span class="badge bg-success-subtle text-success-emphasis rounded-3 me-1" title="Policy route active" style="font-size: 0.62rem;">
+											<i class="bi bi-signpost-split"></i> Route
+										</span>
+									</template>
+									<template v-else-if="(peer.is_gateway === true || peer.is_gateway === 1) && policyRoutes.length > 0">
+										<span class="badge bg-secondary-subtle text-secondary-emphasis rounded-3 me-1" title="Policy route inactive" style="font-size: 0.62rem;">
+											<i class="bi bi-signpost-split"></i> Route
+										</span>
+									</template>
 									{{ peer.name || 'Untitled' }}
 								</strong>
 							</td>
@@ -632,6 +658,7 @@ watch(() => route.query.id, (newValue) => {
 					  :searchPeersLength="searchPeers.length"
 					  :order="order"
 					  :ConfigurationInfo="configurationInfo"
+					  :policyRoutes="policyRoutes"
 					  @details="configurationModals.peerDetails.modalOpen = true; configurationModalSelectedPeer = peer"
 				      @share="configurationModals.peerShare.modalOpen = true; configurationModalSelectedPeer = peer"
 				      @refresh="fetchPeerList()"

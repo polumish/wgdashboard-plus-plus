@@ -15,7 +15,7 @@ export default {
 		PeerTagBadge, LocaleText, PeerSettingsDropdown
 	},
 	props: {
-		Peer: Object, ConfigurationInfo: Object, order: Number, searchPeersLength: Number
+		Peer: Object, ConfigurationInfo: Object, order: Number, searchPeersLength: Number, policyRoutes: Array
 	},
 	setup(){
 		const target = ref(null);
@@ -35,6 +35,11 @@ export default {
 		},
 		getDropup(){
 			return this.searchPeersLength - this.order <= 3
+		},
+		policyRouteStatus(){
+			if (!this.policyRoutes || !(this.Peer.is_gateway === true || this.Peer.is_gateway === 1)) return null
+			if (this.policyRoutes.length === 0) return null
+			return this.policyRoutes.some(r => r.active) ? 'active' : 'inactive'
 		}
 	}
 }
@@ -86,6 +91,12 @@ export default {
 				</span>
 				<span v-else-if="Peer.is_gateway === 2" class="badge bg-success-subtle text-success-emphasis rounded-3 me-1" title="Server">
 					<i class="bi bi-hdd-rack"></i> SRV
+				</span>
+				<span v-if="policyRouteStatus === 'active'" class="badge bg-success-subtle text-success-emphasis rounded-3 me-1" title="Policy route active">
+					<i class="bi bi-signpost-split"></i> Route
+				</span>
+				<span v-else-if="policyRouteStatus === 'inactive'" class="badge bg-secondary-subtle text-secondary-emphasis rounded-3 me-1" title="Policy route inactive">
+					<i class="bi bi-signpost-split"></i> Route
 				</span>
 				{{Peer.name ? Peer.name : GetLocale('Untitled Peer')}}
 			</h6>
