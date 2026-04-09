@@ -77,21 +77,21 @@ class TestConfigSubnet:
         mgr = PolicyRoutingManager()
         wc = MagicMock()
         wc.Address = "10.200.0.1/24"
-        assert mgr._config_subnet(wc) == "10.200.0.0/24"
+        assert mgr.config_subnet(wc) == "10.200.0.0/24"
 
     def test_skips_ipv6(self):
         PolicyRoutingManager, _ = _import_manager()
         mgr = PolicyRoutingManager()
         wc = MagicMock()
         wc.Address = "fd00::1/64, 10.128.69.1/24"
-        assert mgr._config_subnet(wc) == "10.128.69.0/24"
+        assert mgr.config_subnet(wc) == "10.128.69.0/24"
 
     def test_returns_none_for_empty(self):
         PolicyRoutingManager, _ = _import_manager()
         mgr = PolicyRoutingManager()
         wc = MagicMock()
         wc.Address = ""
-        assert mgr._config_subnet(wc) is None
+        assert mgr.config_subnet(wc) is None
 
 
 class TestApplyRules:

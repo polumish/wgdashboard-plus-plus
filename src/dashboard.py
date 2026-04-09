@@ -1506,7 +1506,7 @@ def _syncGatewaySubnetsToConfig(wc):
         # Full tunnel — override stays 0.0.0.0/0, don't touch
         return '0.0.0.0/0'
     if mode == 'mesh':
-        tunnelSubnet = AllPolicyRouting._config_subnet(wc)
+        tunnelSubnet = AllPolicyRouting.config_subnet(wc)
         if tunnelSubnet:
             lanSubnets.add(tunnelSubnet)
     # point-to-site: no tunnel subnet, only server /32s + gateway LANs
@@ -1750,7 +1750,7 @@ def API_addPeers(configName):
                 except (ValueError, Exception):
                     _configDefaultEAIP = _addr
             else:  # mesh
-                _configDefaultEAIP = AllPolicyRouting._config_subnet(_wc) or DashboardConfig.GetConfig("Peers", "peer_endpoint_allowed_ip")[1]
+                _configDefaultEAIP = AllPolicyRouting.config_subnet(_wc) or DashboardConfig.GetConfig("Peers", "peer_endpoint_allowed_ip")[1]
             endpoint_allowed_ip: str = data.get('endpoint_allowed_ip', _configDefaultEAIP)
             if endpoint_allowed_ip == '0.0.0.0/0' and _mode != 'gateway':
                 endpoint_allowed_ip = _configDefaultEAIP

@@ -41,7 +41,7 @@ class PolicyRoutingManager:
         h = int(hashlib.sha1(config_name.encode()).hexdigest(), 16)
         return 100 + (h % 153)
 
-    def _config_subnet(self, wc) -> str | None:
+    def config_subnet(self, wc) -> str | None:
         """Extract IPv4 network CIDR from wc.Address."""
         for addr in (a.strip() for a in (wc.Address or "").split(",")):
             if not addr:
@@ -109,7 +109,7 @@ class PolicyRoutingManager:
             return
 
         wc = configs[config_name]
-        source = self._config_subnet(wc)
+        source = self.config_subnet(wc)
         if not source:
             logger.warning("apply_rules: no IPv4 subnet for %s", config_name)
             return

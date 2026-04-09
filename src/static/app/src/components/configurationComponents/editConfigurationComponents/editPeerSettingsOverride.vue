@@ -249,8 +249,8 @@ const submitForm = async () => {
 			<small>
 				<i class="bi" :class="applyResult.ok ? 'bi-check-circle-fill' : 'bi-x-circle-fill'"></i>
 				{{ applyResult.msg }}
-				<span v-if="applyResult.ok && applyResult.data">
-					(table {{ applyResult.data.tableId }})
+				<span v-if="applyResult.ok && applyResult.data && applyResult.data.rules && applyResult.data.rules.length">
+					({{ applyResult.data.rules.length }} rule{{ applyResult.data.rules.length > 1 ? 's' : '' }}, table {{ applyResult.data.rules[0].table_id }})
 				</span>
 			</small>
 		</div>
