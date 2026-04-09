@@ -39,7 +39,7 @@ onMounted(loadStatus)
         <div v-else class="table-responsive">
             <table class="table table-sm table-hover mb-0">
                 <thead>
-                    <tr>
+                    <tr class="text-body-secondary">
                         <th>Source</th>
                         <th>Destination</th>
                         <th>Device</th>
