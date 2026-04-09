@@ -225,6 +225,21 @@ class PolicyRoutingManager:
         """Called when gateway peers are added/updated/deleted. Rebuilds rules."""
         self.apply_rules(config_name)
 
+    def cleanup_legacy_rules(self):
+        """Remove all old-style ip rules at priority 100 created by the previous
+        _applyPolicyRoutesLive code. Old rules use 'from X table N' without 'to',
+        and may have stale table IDs due to collision. Safe to call before sync_all
+        which will recreate the correct rules."""
+        logger.info("cleanup_legacy_rules: removing all priority 100 ip rules")
+        while True:
+            res = self._run(["ip", "rule", "del", "priority", "100"])
+            if res.returncode != 0:
+                break
+        # Flush all tables in the 100-252 range that we use
+        for table_id in range(100, 253):
+            self._run(["ip", "route", "flush", "table", str(table_id)])
+        logger.info("cleanup_legacy_rules: done")
+
     def sync_all(self):
         """Rebuild policy routes for all WG interfaces. Called on startup and after restore."""
         if self._configurations_fn is None:

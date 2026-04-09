@@ -340,6 +340,7 @@ with app.app_context():
     AllBackupScheduler = BackupScheduler(AllBackupManager, DashboardConfig)
     AllBackupScheduler.start()
     AllPolicyRouting.init(lambda: WireguardConfigurations)
+    AllPolicyRouting.cleanup_legacy_rules()
     AllPolicyRouting.sync_all()
     app.logger.info("PolicyRoutingManager initialized and synced")
 
