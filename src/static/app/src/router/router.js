@@ -75,6 +75,14 @@ const router = createRouter({
                             }
                         },
                         {
+                            name: "Policy Routing",
+                            path: "policy_routing",
+                            component: () => import("@/components/settingsComponent/policyRoutingStatus.vue"),
+                            meta: {
+                                title: "Policy Routing"
+                            }
+                        },
+                        {
                             name: "Network Diagnostics",
                             path: "network_diagnostics",
                             component: () => import("@/components/settingsComponent/networkDiagnosticsSettings.vue"),

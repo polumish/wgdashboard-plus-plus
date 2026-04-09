@@ -56,6 +56,10 @@ export default {
 					title: "Backup & Restore"
 				},
 				{
+					id: "policy_routing",
+					title: "Policy Routing"
+				},
+				{
 					id: "network_diagnostics",
 					title: "Network Diagnostics"
 				}
