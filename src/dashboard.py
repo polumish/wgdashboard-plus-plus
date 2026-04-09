@@ -183,7 +183,8 @@ def startThreads():
         app.logger.info("Background Thread #3 (BackupScheduler) Started")
     AllDiagnosticsMonitor.start(
         lambda: WireguardConfigurations, app.logger,
-        lambda: int(DashboardConfig.GetConfig("Server", "peer_handshake_threshold")[1])
+        lambda: int(DashboardConfig.GetConfig("Server", "peer_handshake_threshold")[1]),
+        policy_status_fn=lambda: AllPolicyRouting.get_status()
     )
 
 AllBackupManager: BackupManager = None

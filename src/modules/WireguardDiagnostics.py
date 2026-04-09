@@ -293,6 +293,7 @@ class DiagnosticsMonitor:
         self._subscribers = []  # list of (queue, interfaces_filter)
         self._lock = threading.Lock()
         self._running = False
+        self._policy_status_fn = None
 
     def subscribe(self, interfaces: list | None = None):
         """Subscribe to diagnostics updates. Returns a queue that receives JSON strings."""
@@ -307,11 +308,12 @@ class DiagnosticsMonitor:
         with self._lock:
             self._subscribers = [(sq, f) for sq, f in self._subscribers if sq is not q]
 
-    def start(self, get_configurations, app_logger, get_threshold=None):
+    def start(self, get_configurations, app_logger, get_threshold=None, policy_status_fn=None):
         """Start the background monitor thread."""
         self._get_configurations = get_configurations
         self._logger = app_logger
         self._get_threshold = get_threshold
+        self._policy_status_fn = policy_status_fn
         self._running = True
         thread = threading.Thread(target=self._monitor_loop, daemon=True)
         thread.start()
@@ -343,6 +345,31 @@ class DiagnosticsMonitor:
                     peer_names = self._get_peer_names(config)
                     snapshot = self._collector.build_snapshot(name, protocol, peer_names, threshold)
                     if snapshot:
+                        # Add policy routing warnings
+                        if self._policy_status_fn:
+                            try:
+                                policy_status = self._policy_status_fn()
+                                config_rules = [r for r in policy_status if r["config_name"] == name]
+                                has_gateways = any(getattr(p, "is_gateway", 0) == 1 for p in config.Peers)
+
+                                if has_gateways and not config_rules:
+                                    snapshot["warnings"].append({
+                                        "type": "policy_route_missing",
+                                        "target": name,
+                                        "message": f"{name} has gateway peers but no policy routes applied",
+                                    })
+
+                                for rule in config_rules:
+                                    if not rule["active"]:
+                                        snapshot["warnings"].append({
+                                            "type": "policy_route_inactive",
+                                            "target": name,
+                                            "message": f"Policy route {rule['source_subnet']} → {rule['dest_subnet']} inactive (interface may be down)",
+                                        })
+                            except Exception as e:
+                                if self._logger:
+                                    self._logger.debug(f"Policy routing diagnostics error: {e}")
+
                         full_snapshot[name] = snapshot
 
                 with self._lock:
