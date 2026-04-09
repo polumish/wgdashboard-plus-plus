@@ -59,8 +59,10 @@ class PolicyRoutingManager:
         config_net = None
         for addr in (a.strip() for a in (wc.Address or "").split(",")):
             try:
-                config_net = ipaddress.ip_interface(addr).network
-                break
+                iface = ipaddress.ip_interface(addr)
+                if iface.version == 4:
+                    config_net = iface.network
+                    break
             except ValueError:
                 pass
 
@@ -83,15 +85,19 @@ class PolicyRoutingManager:
 
     def _run(self, cmd: list[str]) -> subprocess.CompletedProcess:
         """Run a shell command, log failures."""
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        except subprocess.TimeoutExpired:
+            logger.warning("cmd %s timed out after 5s", " ".join(cmd))
+            return subprocess.CompletedProcess(cmd, returncode=1, stdout="", stderr="timeout")
         if result.returncode != 0 and result.stderr:
             logger.debug("cmd %s stderr: %s", " ".join(cmd), result.stderr.strip())
         return result
 
     def _interface_is_up(self, name: str) -> bool:
-        """Check if a network interface exists and is UP."""
+        """Check if a network interface exists. WG interfaces report state UNKNOWN when up."""
         result = self._run(["ip", "link", "show", name])
-        return result.returncode == 0 and "UP" in result.stdout
+        return result.returncode == 0
 
     def apply_rules(self, config_name: str):
         """Flush and rebuild ip rule/route entries for one WG interface."""
@@ -112,26 +118,21 @@ class PolicyRoutingManager:
         dest_subnets = self._gateway_dest_subnets(wc)
         is_up = self._interface_is_up(config_name)
 
-        with self._lock:
-            # Build rule objects
-            rules = [
-                PolicyRule(
-                    config_name=config_name,
-                    table_id=table_id,
-                    source_subnet=source,
-                    dest_subnet=dest,
-                    device=config_name,
-                    active=is_up,
-                )
-                for dest in dest_subnets
-            ]
-            self._rules[config_name] = rules
+        # Build rule objects
+        rules = [
+            PolicyRule(
+                config_name=config_name,
+                table_id=table_id,
+                source_subnet=source,
+                dest_subnet=dest,
+                device=config_name,
+                active=is_up,
+            )
+            for dest in dest_subnets
+        ]
 
-            if not is_up:
-                logger.info("apply_rules: %s is down, rules saved but not applied", config_name)
-                return
-
-            # Flush table
+        if is_up:
+            # All subprocess calls OUTSIDE the lock
             self._run(["ip", "route", "flush", "table", str(table_id)])
 
             # Remove old rules for this source+table
@@ -140,43 +141,46 @@ class PolicyRoutingManager:
                 if res.returncode != 0:
                     break
 
-            if not dest_subnets:
-                logger.info("apply_rules: %s — no gateway peers, routes cleared", config_name)
-                return
+            if dest_subnets:
+                # Add own subnet route
+                self._run(["ip", "route", "add", source, "dev", config_name, "table", str(table_id)])
 
-            # Add own subnet route
-            self._run(["ip", "route", "add", source, "dev", config_name, "table", str(table_id)])
-
-            # Add per-destination rules and routes
-            for dest in dest_subnets:
-                self._run([
-                    "ip", "rule", "add", "from", source, "to", dest,
-                    "table", str(table_id), "priority", "100",
-                ])
-                self._run([
-                    "ip", "route", "add", dest, "dev", config_name,
-                    "table", str(table_id),
-                ])
+                # Add per-destination rules and routes
+                for dest in dest_subnets:
+                    self._run([
+                        "ip", "rule", "add", "from", source, "to", dest,
+                        "table", str(table_id), "priority", "100",
+                    ])
+                    self._run([
+                        "ip", "route", "add", dest, "dev", config_name,
+                        "table", str(table_id),
+                    ])
 
             logger.info(
                 "apply_rules: %s — table %d, source %s, %d destinations",
                 config_name, table_id, source, len(dest_subnets),
             )
+        else:
+            logger.info("apply_rules: %s is down, rules saved but not applied", config_name)
+
+        # Only state mutation under the lock
+        with self._lock:
+            self._rules[config_name] = rules
 
     def remove_rules(self, config_name: str):
         """Remove all policy routing rules for a WG interface."""
         with self._lock:
             rules = self._rules.pop(config_name, [])
-            if not rules:
-                return
-            table_id = rules[0].table_id
-            source = rules[0].source_subnet
-            self._run(["ip", "route", "flush", "table", str(table_id)])
-            while True:
-                res = self._run(["ip", "rule", "del", "from", source, "table", str(table_id)])
-                if res.returncode != 0:
-                    break
-            logger.info("remove_rules: %s — cleared table %d", config_name, table_id)
+        if not rules:
+            return
+        table_id = rules[0].table_id
+        source = rules[0].source_subnet
+        self._run(["ip", "route", "flush", "table", str(table_id)])
+        while True:
+            res = self._run(["ip", "rule", "del", "from", source, "table", str(table_id)])
+            if res.returncode != 0:
+                break
+        logger.info("remove_rules: %s — cleared table %d", config_name, table_id)
 
     def on_gateway_changed(self, config_name: str):
         """Called when gateway peers are added/updated/deleted. Rebuilds rules."""

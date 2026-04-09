@@ -293,6 +293,25 @@ class TestApplyRules:
         assert dests == {"10.0.50.0/24", "10.0.60.0/24"}
 
 
+class TestGatewayDestSubnets:
+
+    def test_gateway_subnets_ipv6_first_address(self):
+        """Config with IPv6-first address should still filter gateway subnets correctly."""
+        PolicyRoutingManager, _ = _import_manager()
+        mgr = PolicyRoutingManager()
+        gateway = MagicMock()
+        gateway.is_gateway = 1
+        gateway.allowed_ip = "fd00::5/128, 10.0.50.0/24"
+        wc = MagicMock()
+        wc.Address = "fd00::1/64, 10.200.0.1/24"
+        wc.Peers = [gateway]
+        subnets = mgr._gateway_dest_subnets(wc)
+        assert "10.0.50.0/24" in subnets
+        # fd00::5/128 is within fd00::/64 but we should only compare IPv4
+        # The IPv6 entry should still be included since we can't filter it with IPv4 config_net
+        assert "fd00::5/128" in subnets
+
+
 class TestDiagnosticsIntegration:
     """Additional tests for edge cases and status API."""
 
