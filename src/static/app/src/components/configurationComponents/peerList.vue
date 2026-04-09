@@ -30,6 +30,7 @@ const route = useRoute()
 const configurationInfo = ref({})
 const configurationPeers = ref([])
 const policyRoutes = ref([])
+const policyRouteModalOpen = ref(false)
 const configurationToggling = ref(false)
 const configurationModalSelectedPeer = ref({})
 const tableSortBy = ref('status')
@@ -456,8 +457,8 @@ watch(() => route.query.id, (newValue) => {
 		<!-- Table View -->
 		<div v-if="dashboardStore.Configuration.Server.dashboard_peer_list_display === 'table'" class="table-responsive">
 			<table class="table table-striped table-hover align-middle mb-0">
-				<thead class="table-light">
-					<tr>
+				<thead>
+					<tr class="text-body-secondary">
 						<th style="min-width: 80px" role="button" @click="tableSortBy = 'status'; tableSortAsc = tableSortBy === 'status' ? !tableSortAsc : true" title="Sort by status">
 							<small class="d-flex align-items-center gap-1">
 								<LocaleText t="Status"></LocaleText>
@@ -507,18 +508,12 @@ watch(() => route.query.id, (newValue) => {
 								<span v-else-if="peer.is_gateway === 2" class="badge bg-success-subtle text-success-emphasis rounded-3 me-1" title="Server" style="font-size: 0.65rem;">
 									<i class="bi bi-hdd-rack"></i> SRV
 								</span>
-								<template v-if="(peer.is_gateway === true || peer.is_gateway === 1) && policyRoutes.length > 0 && policyRoutes.some(r => r.active)">
-									<span class="badge bg-success-subtle text-success-emphasis rounded-3 me-1"
-										:title="'Policy routes:\n' + policyRoutes.map(r => r.source_subnet + ' → ' + r.dest_subnet + ' (table ' + r.table_id + ')').join('\n')"
-										style="font-size: 0.65rem; cursor: help;">
-										<i class="bi bi-signpost-split"></i> Route
-									</span>
-								</template>
-								<template v-else-if="(peer.is_gateway === true || peer.is_gateway === 1) && policyRoutes.length > 0">
-									<span class="badge bg-secondary-subtle text-secondary-emphasis rounded-3 me-1"
-										:title="'Policy routes (inactive):\n' + policyRoutes.map(r => r.source_subnet + ' → ' + r.dest_subnet + ' (table ' + r.table_id + ')').join('\n')"
-										style="font-size: 0.65rem; cursor: help;">
-										<i class="bi bi-signpost-split"></i> Route
+								<template v-if="(peer.is_gateway === true || peer.is_gateway === 1) && policyRoutes.length > 0">
+									<span class="badge rounded-3 me-1"
+										:class="policyRoutes.some(r => r.active) ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'"
+										style="font-size: 0.65rem; cursor: pointer;"
+										@click.stop.prevent="policyRouteModalOpen = true">
+										<i class="bi bi-diagram-3"></i> Route
 									</span>
 								</template>
 								{{ peer.name || 'Untitled' }}
@@ -569,8 +564,8 @@ watch(() => route.query.id, (newValue) => {
 		<div v-else-if="dashboardStore.Configuration.Server.dashboard_peer_list_display === 'columns'" class="d-flex gap-2" style="align-items: flex-start;">
 			<div class="flex-fill" style="min-width: 0;" v-for="(half, hi) in [columnsLeftPeers, columnsRightPeers]" :key="hi">
 				<table class="table table-striped table-hover align-middle mb-0" style="font-size: 0.82rem;">
-					<thead class="table-light">
-						<tr>
+					<thead>
+						<tr class="text-body-secondary">
 							<th style="width: 14px"></th>
 							<th><small><LocaleText t="Name"></LocaleText></small></th>
 							<th><small><LocaleText t="Allowed IPs"></LocaleText></small></th>
@@ -596,18 +591,12 @@ watch(() => route.query.id, (newValue) => {
 									<span v-else-if="peer.is_gateway === 2" class="badge bg-success-subtle text-success-emphasis rounded-3 me-1" title="Server" style="font-size: 0.62rem;">
 										<i class="bi bi-hdd-rack"></i> SRV
 									</span>
-									<template v-if="(peer.is_gateway === true || peer.is_gateway === 1) && policyRoutes.length > 0 && policyRoutes.some(r => r.active)">
-										<span class="badge bg-success-subtle text-success-emphasis rounded-3 me-1"
-											:title="'Policy routes:\n' + policyRoutes.map(r => r.source_subnet + ' → ' + r.dest_subnet + ' (table ' + r.table_id + ')').join('\n')"
-											style="font-size: 0.62rem; cursor: help;">
-											<i class="bi bi-signpost-split"></i> Route
-										</span>
-									</template>
-									<template v-else-if="(peer.is_gateway === true || peer.is_gateway === 1) && policyRoutes.length > 0">
-										<span class="badge bg-secondary-subtle text-secondary-emphasis rounded-3 me-1"
-											:title="'Policy routes (inactive):\n' + policyRoutes.map(r => r.source_subnet + ' → ' + r.dest_subnet + ' (table ' + r.table_id + ')').join('\n')"
-											style="font-size: 0.62rem; cursor: help;">
-											<i class="bi bi-signpost-split"></i> Route
+									<template v-if="(peer.is_gateway === true || peer.is_gateway === 1) && policyRoutes.length > 0">
+										<span class="badge rounded-3 me-1"
+											:class="policyRoutes.some(r => r.active) ? 'bg-success-subtle text-success-emphasis' : 'bg-secondary-subtle text-secondary-emphasis'"
+											style="font-size: 0.62rem; cursor: pointer;"
+											@click.stop.prevent="policyRouteModalOpen = true">
+											<i class="bi bi-diagram-3"></i> Route
 										</span>
 									</template>
 									{{ peer.name || 'Untitled' }}
@@ -756,6 +745,43 @@ watch(() => route.query.id, (newValue) => {
 		:showPeersCount="showPeersCount"
 		:peerListLength="searchPeers.length"
 		@loadMore="showPeersCount += showPeersThreshold"></PeerIntersectionObserver>
+	<Teleport to="body">
+		<div v-if="policyRouteModalOpen" class="policy-route-overlay" @mousedown="policyRouteModalOpen = false">
+			<div class="policy-route-modal shadow-lg rounded-3 p-3" @mousedown.stop>
+				<div class="d-flex align-items-center mb-2">
+					<strong style="font-size: 0.9rem;"><i class="bi bi-diagram-3 me-1"></i>Policy Routes</strong>
+					<button type="button" class="btn-close ms-auto" style="font-size: 0.6rem;"
+						@click="policyRouteModalOpen = false"></button>
+				</div>
+				<table v-if="policyRoutes.length" class="table table-sm mb-0" style="font-size: 0.8rem;">
+					<thead>
+						<tr class="text-body-secondary">
+							<th>Source</th>
+							<th>Destination</th>
+							<th>Device</th>
+							<th>Table</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr v-for="rule in policyRoutes" :key="rule.config_name + rule.dest_subnet">
+							<td><code>{{ rule.source_subnet }}</code></td>
+							<td><code>{{ rule.dest_subnet }}</code></td>
+							<td>{{ rule.device }}</td>
+							<td>{{ rule.table_id }}</td>
+							<td>
+								<span v-if="rule.active" class="text-success"><i class="bi bi-check-circle-fill"></i></span>
+								<span v-else class="text-secondary"><i class="bi bi-dash-circle"></i></span>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+				<div v-else class="text-muted text-center py-2">
+					<small>No policy routes configured</small>
+				</div>
+			</div>
+		</div>
+	</Teleport>
 </div>
 </template>
 
@@ -787,5 +813,25 @@ tr.server-row {
 	.titleBtn{
 		flex-basis: 100%;
 	}
+}
+
+.policy-route-overlay{
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100vw;
+	height: 100vh;
+	z-index: 1060;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0,0,0,0.3);
+}
+
+.policy-route-modal{
+	background-color: var(--bs-body-bg);
+	border: 1px solid var(--bs-border-color);
+	min-width: 350px;
+	max-width: 550px;
 }
 </style>

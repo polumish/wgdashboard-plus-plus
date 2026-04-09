@@ -1,1 +1,0 @@
-import{N as e}from"./NetworkDiagnostics-F7Tb8pqQ.js";import{c as t,b as o,f as a}from"./index-BZ0njiuI.js";const l={__name:"networkDiagnosticsSettings",setup(r){return(s,c)=>(a(),t("div",null,[o(e,{mode:"all"})]))}};export{l as default};
