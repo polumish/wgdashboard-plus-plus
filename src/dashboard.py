@@ -1506,15 +1506,28 @@ def _syncGatewaySubnetsToConfig(wc):
                     lanSubnets.add(part)
                 except (ValueError, TypeError):
                     lanSubnets.add(part)
-        elif peerType == 2 and mode == 'point-to-site':
-            # Server in P2S: add its WG IP as /32 (in mesh, /24 covers it)
-            firstIp = (p.allowed_ip or '').split(',')[0].strip()
-            if firstIp:
+        elif peerType == 2:
+            # Server peer: add its tunnel /32 (in P2S only — mesh /24 covers it)
+            # and all extra routes behind it (IPs outside the interface subnet).
+            parts = [x.strip() for x in (p.allowed_ip or '').split(',') if x.strip()]
+            for idx, part in enumerate(parts):
                 try:
-                    ip = _ipaddress.ip_interface(firstIp).ip
-                    lanSubnets.add(f'{ip}/32')
+                    net = _ipaddress.ip_network(part, strict=False)
                 except ValueError:
-                    lanSubnets.add(firstIp)
+                    lanSubnets.add(part)
+                    continue
+                inTunnel = configNet is not None and net.version == configNet.version and net.subnet_of(configNet)
+                if inTunnel:
+                    # Only add tunnel /32 in P2S (mesh gets /24 added below anyway)
+                    if mode == 'point-to-site' and idx == 0:
+                        try:
+                            ip = _ipaddress.ip_interface(part).ip
+                            lanSubnets.add(f'{ip}/32')
+                        except ValueError:
+                            lanSubnets.add(part)
+                else:
+                    # Route behind the server — add regardless of mode
+                    lanSubnets.add(part)
     # Mode-aware: mesh gets tunnel subnet, gateway mode keeps 0.0.0.0/0
     if mode == 'gateway':
         # Full tunnel — override stays 0.0.0.0/0, don't touch
