@@ -946,7 +946,9 @@ class WireguardConfiguration:
         subprocess.check_output(f"ip link add {name} type wireguard", shell=True, stderr=subprocess.STDOUT)
         try:
             # Use wg-quick strip to get the pure WireGuard config (no wg-quick directives)
-            stripped = subprocess.check_output(f"{protocol}-quick strip {name}", shell=True, stderr=subprocess.STDOUT)
+            # stderr must be separated — wg-quick may emit warnings (e.g. "world accessible")
+            # that would corrupt the config if mixed into stdout
+            stripped = subprocess.check_output(f"{protocol}-quick strip {name}", shell=True, stderr=subprocess.DEVNULL)
             proc = subprocess.run(f"wg setconf {name} /dev/stdin", shell=True, input=stripped,
                                   capture_output=True)
             if proc.returncode != 0:
