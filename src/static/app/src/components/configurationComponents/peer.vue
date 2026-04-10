@@ -6,6 +6,7 @@ import PeerSettingsDropdown from "@/components/configurationComponents/peerSetti
 import LocaleText from "@/components/text/localeText.vue";
 import {DashboardConfigurationStore} from "@/stores/DashboardConfigurationStore.js";
 import {GetLocale} from "@/utilities/locale.js";
+import {formatTraffic} from "@/utilities/formatBytes.js";
 import PeerTagBadge from "@/components/configurationComponents/peerTagBadge.vue";
 
 export default {
@@ -24,6 +25,7 @@ export default {
 	},
 	methods: {
 		GetLocale,
+		formatTraffic,
 		openRoutePopover(event) {
 			const rect = event.target.getBoundingClientRect()
 			this.routePopoverPos = {x: rect.left, y: rect.top}
@@ -83,11 +85,11 @@ export default {
 				<div style="font-size: 0.8rem" class="ms-auto d-flex gap-2">
 					<span class="text-primary">
 						<i class="bi bi-arrow-down"></i><strong>
-						{{(Peer.cumu_receive + Peer.total_receive).toFixed(4)}}</strong> GB
+						{{ formatTraffic(Peer.cumu_receive + Peer.total_receive) }}</strong>
 					</span>
 					<span class="text-success">
 						<i class="bi bi-arrow-up"></i><strong>
-						{{(Peer.cumu_sent + Peer.total_sent).toFixed(4)}}</strong> GB
+						{{ formatTraffic(Peer.cumu_sent + Peer.total_sent) }}</strong>
 					</span>
 					<span class="text-secondary" v-if="Peer.latest_handshake !== 'No Handshake'">
 						<i class="bi bi-arrows-angle-contract"></i>

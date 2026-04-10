@@ -2,6 +2,7 @@
 import {computed, ref, useTemplateRef} from "vue";
 import PeerSettingsDropdown from "@/components/configurationComponents/peerSettingsDropdown.vue";
 import {onClickOutside} from "@vueuse/core";
+import {formatTraffic} from "@/utilities/formatBytes.js";
 
 const props = defineProps(['Peer'])
 const subMenuOpened = ref(false)
@@ -35,12 +36,12 @@ const emit = defineEmits(['qrcode', 'configurationFile', 'setting', 'jobs', 'ref
 	</td>
 	<td>
 		<small class="text-primary">
-			{{(Peer.cumu_receive + Peer.total_receive).toFixed(4)}} GB
+			{{ formatTraffic(Peer.cumu_receive + Peer.total_receive) }}
 		</small>
 	</td>
 	<td>
 		<small class="text-success">
-			{{(Peer.cumu_sent + Peer.total_sent).toFixed(4)}} GB
+			{{ formatTraffic(Peer.cumu_sent + Peer.total_sent) }}
 		</small>
 	</td>
 	<td>

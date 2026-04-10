@@ -1,6 +1,7 @@
 <script>
 import {fetchGet} from "@/utilities/fetch.js";
 import {DashboardConfigurationStore} from "@/stores/DashboardConfigurationStore.js";
+import {formatTraffic} from "@/utilities/formatBytes.js";
 import LocaleText from "@/components/text/localeText.vue";
 import ProtocolBadge from "@/components/protocolBadge.vue";
 
@@ -28,6 +29,7 @@ export default {
 		return {dashboardConfigurationStore}
 	},
 	methods: {
+		formatTraffic,
 		toggle(){
 			this.configurationToggling = true;
 			fetchGet("/api/toggleWireguardConfiguration", {
@@ -83,13 +85,13 @@ export default {
 			<div class="card-footer d-flex gap-2 flex-column">
 				<div class="row">
 					<small class="col-6" :class="{'col-md-3': this.display === 'List'}">
-						<i class="bi bi-arrow-down-up me-2"></i>{{c.DataUsage.Total > 0 ? c.DataUsage.Total.toFixed(4) : 0}} GB
+						<i class="bi bi-arrow-down-up me-2"></i>{{ formatTraffic(c.DataUsage.Total) }}
 					</small>
 					<small class="text-primary-emphasis col-6" :class="{'col-md-3': this.display === 'List'}">
-						<i class="bi bi-arrow-down me-2"></i>{{c.DataUsage.Receive > 0 ? c.DataUsage.Receive.toFixed(4) : 0}} GB
+						<i class="bi bi-arrow-down me-2"></i>{{ formatTraffic(c.DataUsage.Receive) }}
 					</small>
 					<small class="text-success-emphasis col-6" :class="{'col-md-3': this.display === 'List'}">
-						<i class="bi bi-arrow-up me-2"></i>{{c.DataUsage.Sent > 0 ? c.DataUsage.Sent.toFixed(4) : 0}} GB
+						<i class="bi bi-arrow-up me-2"></i>{{ formatTraffic(c.DataUsage.Sent) }}
 					</small>
 					<small class="col-6" :class="{'col-md-2': this.display === 'List'}">
 						<span class="dot me-2" :class="{active: c.ConnectedPeers > 0}"></span>

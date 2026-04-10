@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import LocaleText from "@/components/text/localeText.vue";
 import {ref} from "vue";
+import {formatTraffic} from "@/utilities/formatBytes.js";
 
 import {
 	Chart,
@@ -116,7 +117,7 @@ defineEmits(['close'])
 												<LocaleText t="Total Usage"></LocaleText>
 											</small></p>
 											<strong class="h4 text-warning">
-												{{ (selectedPeer.total_data + selectedPeer.cumu_data).toFixed(4) }} GB
+												{{ formatTraffic(selectedPeer.total_data + selectedPeer.cumu_data) }}
 											</strong>
 										</div>
 										<i class="bi bi-arrow-down-up ms-auto h2 text-muted"></i>
@@ -130,7 +131,7 @@ defineEmits(['close'])
 											<p class="mb-0 text-muted"><small>
 												<LocaleText t="Total Received"></LocaleText>
 											</small></p>
-											<strong class="h4 text-primary">{{(selectedPeer.total_receive + selectedPeer.cumu_receive).toFixed(4)}} GB</strong>
+											<strong class="h4 text-primary">{{ formatTraffic(selectedPeer.total_receive + selectedPeer.cumu_receive) }}</strong>
 										</div>
 										<i class="bi bi-arrow-down ms-auto h2 text-muted"></i>
 									</div>
@@ -143,7 +144,7 @@ defineEmits(['close'])
 											<p class="mb-0 text-muted"><small>
 												<LocaleText t="Total Sent"></LocaleText>
 											</small></p>
-											<strong class="h4 text-success">{{(selectedPeer.total_sent + selectedPeer.cumu_sent).toFixed(4)}} GB</strong>
+											<strong class="h4 text-success">{{ formatTraffic(selectedPeer.total_sent + selectedPeer.cumu_sent) }}</strong>
 										</div>
 										<i class="bi bi-arrow-up ms-auto h2 text-muted"></i>
 									</div>

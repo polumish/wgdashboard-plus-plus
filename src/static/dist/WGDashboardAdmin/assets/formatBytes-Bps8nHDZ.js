@@ -1,0 +1,1 @@
+function c(r){const t=Number(r);if(!t||t<=0||!Number.isFinite(t))return"0 B";const s=t*1024*1024*1024,i=["B","KB","MB","GB","TB"];let e=0,n=s;for(;n>=1024&&e<i.length-1;)n/=1024,e++;const o=e===0?0:2;return`${n.toFixed(o)} ${i[e]}`}export{c as f};

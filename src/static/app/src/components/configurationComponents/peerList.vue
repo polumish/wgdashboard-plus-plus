@@ -13,6 +13,7 @@ import PeerListModals from "@/components/configurationComponents/peerListCompone
 import PeerIntersectionObserver from "@/components/configurationComponents/peerIntersectionObserver.vue";
 import PeerDetailsModal from "@/components/configurationComponents/peerDetailsModal.vue";
 import {parseCidr} from "cidr-tools";
+import {formatTraffic} from "@/utilities/formatBytes.js";
 
 // Async Components
 const PeerSearchBar = defineAsyncComponent(() => import("@/components/configurationComponents/peerSearchBar.vue"))
@@ -172,17 +173,13 @@ const toggleConfiguration = async () => {
 
 // Configuration Summary =====================================
 const configurationSummary = computed(() => {
+	const activePeers = configurationPeers.value.filter(x => !x.restricted)
+	const sum = (key1, key2) => activePeers.map(x => x[key1] + x[key2]).reduce((a, b) => a + b, 0)
 	return {
 		connectedPeers: configurationPeers.value.filter(x => x.status === "running").length,
-		totalUsage: configurationPeers.value.length > 0 ?
-			configurationPeers.value.filter(x => !x.restricted)
-				.map(x => x.total_data + x.cumu_data).reduce((a, b) => a + b, 0).toFixed(4) : 0,
-		totalReceive: configurationPeers.value.length > 0 ?
-			configurationPeers.value.filter(x => !x.restricted)
-				.map(x => x.total_receive + x.cumu_receive).reduce((a, b) => a + b, 0).toFixed(4) : 0,
-		totalSent: configurationPeers.value.length > 0 ?
-			configurationPeers.value.filter(x => !x.restricted)
-				.map(x => x.total_sent + x.cumu_sent).reduce((a, b) => a + b, 0).toFixed(4) : 0
+		totalUsage: configurationPeers.value.length > 0 ? sum('total_data', 'cumu_data') : 0,
+		totalReceive: configurationPeers.value.length > 0 ? sum('total_receive', 'cumu_receive') : 0,
+		totalSent: configurationPeers.value.length > 0 ? sum('total_sent', 'cumu_sent') : 0
 	}
 })
 
@@ -443,7 +440,7 @@ watch(() => route.query.id, (newValue) => {
 			<small class="text-muted"><samp>{{configurationInfo.Address}}</samp></small>
 			<small class="text-muted">:<samp>{{configurationInfo.ListenPort}}</samp></small>
 			<small class="text-muted ms-auto">
-				<i class="bi bi-arrow-down-up me-1"></i>{{configurationSummary.totalUsage}} GB
+				<i class="bi bi-arrow-down-up me-1"></i>{{ formatTraffic(configurationSummary.totalUsage) }}
 			</small>
 		</div>
 		<Transition name="fade2">
@@ -533,8 +530,8 @@ watch(() => route.query.id, (newValue) => {
 						<td><small><samp>{{ peer.allowed_ip }}</samp></small></td>
 						<td>
 							<small class="d-flex flex-column">
-								<span><i class="bi bi-arrow-down text-success me-1"></i>{{ (peer.cumu_receive + peer.total_receive).toFixed(2) }} GB</span>
-								<span><i class="bi bi-arrow-up text-primary me-1"></i>{{ (peer.cumu_sent + peer.total_sent).toFixed(2) }} GB</span>
+								<span><i class="bi bi-arrow-down text-success me-1"></i>{{ formatTraffic(peer.cumu_receive + peer.total_receive) }}</span>
+								<span><i class="bi bi-arrow-up text-primary me-1"></i>{{ formatTraffic(peer.cumu_sent + peer.total_sent) }}</span>
 							</small>
 						</td>
 						<td><small class="text-muted"><samp>{{ peer.endpoint }}</samp></small></td>
