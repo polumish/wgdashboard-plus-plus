@@ -603,7 +603,7 @@ class WireguardConfiguration:
                         "keepalive": i['keepalive'],
                         "remote_endpoint": self.DashboardConfig.GetConfig("Peers", "remote_endpoint")[1],
                         "preshared_key": i["preshared_key"],
-                        "is_gateway": 1 if i.get("is_gateway") else 0,
+                        "is_gateway": int(i.get("is_gateway") or 0),
                         "opnsense_listen_port": int(i.get("opnsense_listen_port") or 0)
                     }
                     conn.execute(

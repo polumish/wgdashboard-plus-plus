@@ -1490,6 +1490,7 @@ def _syncGatewaySubnetsToConfig(wc):
             break
         except ValueError:
             pass
+    mode = getattr(wc.configurationInfo, 'NetworkMode', 'mesh')
     for p in wc.Peers:
         peerType = getattr(p, 'is_gateway', 0)
         if peerType == 1:
@@ -1515,7 +1516,6 @@ def _syncGatewaySubnetsToConfig(wc):
                 except ValueError:
                     lanSubnets.add(firstIp)
     # Mode-aware: mesh gets tunnel subnet, gateway mode keeps 0.0.0.0/0
-    mode = getattr(wc.configurationInfo, 'NetworkMode', 'mesh')
     if mode == 'gateway':
         # Full tunnel — override stays 0.0.0.0/0, don't touch
         return '0.0.0.0/0'
@@ -1872,16 +1872,40 @@ def API_addPeers(configName):
                         return ResponseObject(False, "No more available IP can assign") 
 
                 if allowed_ips_validation:
+                    # Interface subnets (tunnel networks) for this configuration
+                    ifaceSubnets = []
+                    for a in (config.Address or '').split(','):
+                        a = a.strip()
+                        if a:
+                            try:
+                                ifaceSubnets.append(ipaddress.ip_network(a, strict=False))
+                            except ValueError:
+                                pass
+                    tunnelIpFound = False
                     for i in allowed_ips:
-                        found = False
-                        for subnet in availableIps.keys():
-                            network = ipaddress.ip_network(subnet, False)
+                        try:
                             ap = ipaddress.ip_network(i)
-                            if network.version == ap.version and ap.subnet_of(network):
-                                found = True
-                        
-                        if not found:
-                            return ResponseObject(False, f"This IP is not available: {i}")
+                        except ValueError:
+                            return ResponseObject(False, f"Invalid IP: {i}")
+                        # Is this CIDR inside any interface subnet?
+                        inTunnelSubnet = any(
+                            ap.version == s.version and ap.subnet_of(s)
+                            for s in ifaceSubnets
+                        )
+                        if inTunnelSubnet:
+                            tunnelIpFound = True
+                            # Check it's still in the "available" pool (not taken)
+                            found = False
+                            for subnet in availableIps.keys():
+                                network = ipaddress.ip_network(subnet, False)
+                                if network.version == ap.version and ap.subnet_of(network):
+                                    found = True
+                                    break
+                            if not found:
+                                return ResponseObject(False, f"This IP is not available: {i}")
+                        # else: extra route behind peer — allowed
+                    if not tunnelIpFound:
+                        return ResponseObject(False, "At least one tunnel IP (inside the network subnet) is required")
 
                 peerType = int(data.get('is_gateway', 0) or 0)
                 if peerType not in (0, 1, 2):

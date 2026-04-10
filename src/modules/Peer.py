@@ -131,6 +131,36 @@ class Peer:
         except subprocess.CalledProcessError as exc:
             return False, exc.output.decode("UTF-8").strip()
 
+    def __tunnelAddressesForClientConfig(self) -> str:
+        """Return only CIDRs from allowed_ip that belong to the WG interface
+        subnet. Extra routes (e.g. '10.0.50.163/32' for a server behind the
+        peer) are kept in the server-side AllowedIPs but MUST NOT appear in
+        the client's [Interface] Address — that would conflict with the
+        client's real interfaces.
+        """
+        import ipaddress
+        try:
+            ifaceSubnets = []
+            for a in (self.configuration.Address or '').split(','):
+                a = a.strip()
+                if a:
+                    ifaceSubnets.append(ipaddress.ip_network(a, strict=False))
+            tunnelCidrs = []
+            for cidr in (self.allowed_ip or '').split(','):
+                cidr = cidr.strip()
+                if not cidr:
+                    continue
+                try:
+                    net = ipaddress.ip_network(cidr, strict=False)
+                except ValueError:
+                    continue
+                if any(net.version == s.version and net.subnet_of(s) for s in ifaceSubnets):
+                    tunnelCidrs.append(cidr)
+            # Fallback: if filtering produced nothing (misconfigured), keep old behavior
+            return ', '.join(tunnelCidrs) if tunnelCidrs else self.allowed_ip
+        except Exception:
+            return self.allowed_ip
+
     def downloadPeer(self) -> dict[str, str]:
         final = {
             "fileName": "",
@@ -151,13 +181,16 @@ class Peer:
             if re.match("^[a-zA-Z0-9_=+.-]$", i):
                 final["fileName"] += i
                 
+        # MTU priority:
+        # 1. Per-config override (OverridePeerSettings.MTU)
+        # 2. Network interface MTU (wc.MTU from [Interface] of server .conf)
+        # 3. Per-peer MTU (legacy — copied from global peer_mtu at creation)
+        _override_mtu = self.configuration.configurationInfo.OverridePeerSettings.MTU
+        _network_mtu = self.configuration.MTU
         interfaceSection = {
             "PrivateKey": self.private_key,
-            "Address": self.allowed_ip,
-            "MTU": (
-                self.configuration.configurationInfo.OverridePeerSettings.MTU
-                    if self.configuration.configurationInfo.OverridePeerSettings.MTU else self.mtu
-            ),
+            "Address": self.__tunnelAddressesForClientConfig(),
+            "MTU": _override_mtu or _network_mtu or self.mtu,
             "DNS": (
                 self.configuration.configurationInfo.OverridePeerSettings.DNS 
                     if self.configuration.configurationInfo.OverridePeerSettings.DNS else self.DNS
