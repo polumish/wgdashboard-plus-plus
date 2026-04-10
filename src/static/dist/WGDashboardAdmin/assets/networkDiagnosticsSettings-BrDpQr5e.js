@@ -1,0 +1,1 @@
+import{N as e}from"./NetworkDiagnostics-CKOnnV6O.js";import{c as t,b as o,f as a}from"./index-Bo9-yl9f.js";const l={__name:"networkDiagnosticsSettings",setup(r){return(s,c)=>(a(),t("div",null,[o(e,{mode:"all"})]))}};export{l as default};

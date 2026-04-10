@@ -54,6 +54,11 @@ set_ini() {
 stop_service() {
   echo "[WGDashboard] Stopping WGDashboard..."
 
+  # Stop the background PMTU probe loop if running.
+  if [[ -n "${pmtu_loop_pid:-}" ]]; then
+    kill "$pmtu_loop_pid" 2>/dev/null || true
+  fi
+
   local max_rounds="10"
   local round="0"
   local runtime_pid=""
@@ -264,6 +269,24 @@ start_and_monitor() {
 
   [[ ! -d ${WGDASH}/src/log ]] && mkdir ${WGDASH}/src/log
   [[ ! -d ${WGDASH}/src/download ]] && mkdir ${WGDASH}/src/download
+
+  # Path MTU probe: run in the background, re-probing every hour. Equivalent
+  # to the systemd timer used on bare-metal installs. Kicks in ~30s after
+  # startup so gunicorn + WG interfaces come up first. Wrapped with
+  # `timeout 600` to bound runaway probes (mirrors TimeoutStartSec=300 on
+  # bare-metal plus some slack).
+  mkdir -p /var/lib/wg-pmtu
+  pmtu_loop_pid=""
+  if [[ -x /usr/local/bin/wg-pmtu-probe.sh ]]; then
+    (
+      sleep 30
+      while true; do
+        timeout 600 /usr/local/bin/wg-pmtu-probe.sh >/dev/null 2>&1 || true
+        sleep 3600
+      done
+    ) &
+    pmtu_loop_pid=$!
+  fi
 
   ${WGDASH}/src/venv/bin/gunicorn --config ${WGDASH}/src/gunicorn.conf.py
 

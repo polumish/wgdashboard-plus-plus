@@ -2,9 +2,10 @@ import logging
 import random, shutil, sqlite3, configparser, hashlib, ipaddress, json, os, secrets, subprocess
 import time, re, uuid, bcrypt, psutil, pyotp, threading
 import traceback
+import fcntl, tempfile
 from uuid import uuid4
 from zipfile import ZipFile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import sqlalchemy
 from jinja2 import Template
@@ -1106,6 +1107,256 @@ def API_DiagnosticsWarnings():
         "warnings": all_warnings,
         "count": len(all_warnings),
         "timestamp": int(time.time())
+    })
+
+#
+# PMTU / MTR diagnostics helpers
+# ------------------------------
+# These power the on-demand "refresh" and "mtr" buttons in the Network
+# Diagnostics UI. They are deliberately written without `shell=True`:
+# every subprocess call uses a fixed argv, which removes an entire class
+# of injection/quoting bugs and makes `FileNotFoundError` catches work.
+#
+# The state file (/var/lib/wg-pmtu/state.json) is shared with the hourly
+# systemd probe (wg-pmtu-probe.sh); all writes from both sides go through
+# an fcntl lock on a sidecar lockfile and are atomic (tempfile + rename).
+#
+
+PMTU_STATE_DIR = "/var/lib/wg-pmtu"
+PMTU_STATE_FILE = os.path.join(PMTU_STATE_DIR, "state.json")
+PMTU_LOCK_FILE = os.path.join(PMTU_STATE_DIR, "state.lock")
+
+
+def _parse_target_ip(value: str):
+    """Validate that `value` is a usable IP address for mtr/tracepath/ping.
+
+    Accepts IPv4 and IPv6 in bare or bracketed form, rejects hostnames and
+    anything else. Returns the normalized IP string or None.
+    """
+    import ipaddress as _ipaddress
+    v = (value or "").strip().strip("[]")
+    # IPv6 zone IDs like fe80::1%eth0 — strip for validation
+    v_check = v.split("%", 1)[0]
+    try:
+        return str(_ipaddress.ip_address(v_check))
+    except ValueError:
+        return None
+
+
+def _read_iface_mtu(iface: str) -> int | None:
+    try:
+        with open(f"/sys/class/net/{iface}/mtu") as f:
+            return int(f.read().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _atomic_write_pmtu_state(mutate_fn):
+    """Read, mutate, and atomically rewrite PMTU state.json under an
+    advisory lock. `mutate_fn(state_dict)` mutates the dict in place.
+    Returns the mutated state on success, raises on I/O error.
+    """
+    os.makedirs(PMTU_STATE_DIR, exist_ok=True)
+    with open(PMTU_LOCK_FILE, "w") as lf:
+        fcntl.flock(lf, fcntl.LOCK_EX)
+        existing = {}
+        try:
+            with open(PMTU_STATE_FILE, "r") as f:
+                existing = json.load(f)
+        except (OSError, ValueError):
+            existing = {}
+        mutate_fn(existing)
+        fd, tmp_path = tempfile.mkstemp(
+            dir=PMTU_STATE_DIR, prefix=".state.", suffix=".json"
+        )
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(existing, f, indent=2)
+            os.chmod(tmp_path, 0o644)
+            os.replace(tmp_path, PMTU_STATE_FILE)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+        return existing
+
+
+def _probe_pmtu(ip: str):
+    """Discover path MTU to `ip`. Returns (pmtu, source) where source is
+    one of kernel|tracepath|ping|egress|none.
+    """
+    # 1. Kernel route cache — zero new packets
+    try:
+        out = subprocess.run(
+            ["ip", "route", "get", ip],
+            capture_output=True, text=True, timeout=5
+        ).stdout
+        m = re.search(r"mtu\s+(\d+)", out)
+        if m:
+            return int(m.group(1)), "kernel"
+    except (subprocess.SubprocessError, OSError):
+        pass
+
+    # 2. tracepath
+    try:
+        r = subprocess.run(
+            ["tracepath", "-n", ip],
+            capture_output=True, text=True, timeout=10
+        )
+        out = (r.stdout or "") + (r.stderr or "")
+        resume = re.findall(r"Resume:\s*pmtu\s+(\d+)", out)
+        if resume:
+            return int(resume[-1]), "tracepath"
+        any_pmtu = re.findall(r"pmtu\s+(\d+)", out)
+        if any_pmtu:
+            return int(any_pmtu[-1]), "tracepath"
+    except (FileNotFoundError, subprocess.SubprocessError):
+        pass
+
+    # 3. Ping bisection (small fixed set)
+    for size in (1472, 1452, 1432, 1412, 1392, 1372, 1292, 1272):
+        try:
+            r = subprocess.run(
+                ["ping", "-c", "1", "-W", "1", "-M", "do", "-s", str(size), ip],
+                capture_output=True, timeout=3
+            )
+            if r.returncode == 0:
+                return size + 28, "ping"
+        except (FileNotFoundError, subprocess.SubprocessError):
+            break
+
+    # 4. Egress interface MTU as upper bound (not authoritative)
+    try:
+        out = subprocess.run(
+            ["ip", "route", "get", ip],
+            capture_output=True, text=True, timeout=5
+        ).stdout
+        m = re.search(r"dev\s+(\S+)", out)
+        if m:
+            emtu = _read_iface_mtu(m.group(1))
+            if emtu:
+                return emtu, "egress"
+    except (subprocess.SubprocessError, OSError):
+        pass
+
+    return None, "none"
+
+
+@app.post(f'{APP_PREFIX}/api/diagnostics/mtr')
+def API_DiagnosticsMtr():
+    """Run mtr (My TraceRoute) on demand and return raw output.
+
+    Request JSON: {"target": "1.2.3.4", "cycles": 10}
+    Only IP addresses are accepted as target — hostnames are rejected to
+    avoid ambiguous resolution paths on a host with many WG tunnels.
+    """
+    data = request.get_json() or {}
+    target = _parse_target_ip(data.get("target"))
+    if not target:
+        return ResponseObject(False, "target must be a valid IP address")
+
+    try:
+        cycles = int(data.get("cycles", 10))
+    except (TypeError, ValueError):
+        cycles = 10
+    cycles = max(1, min(cycles, 30))
+
+    try:
+        # shell=False, list argv — no injection surface, proper FileNotFoundError
+        out = subprocess.run(
+            ["mtr", "--report", f"--report-cycles={cycles}", "--no-dns", target],
+            capture_output=True, text=True, timeout=65, check=True,
+        ).stdout
+    except FileNotFoundError:
+        return ResponseObject(False, "mtr is not installed on the server")
+    except subprocess.TimeoutExpired:
+        return ResponseObject(False, "mtr timed out")
+    except subprocess.CalledProcessError as exc:
+        err = (exc.stderr or exc.stdout or "").strip()
+        return ResponseObject(False, f"mtr failed: {err}")
+
+    return ResponseObject(data={"target": target, "cycles": cycles, "output": out})
+
+
+@app.post(f'{APP_PREFIX}/api/pmtu/probe')
+def API_PmtuProbe():
+    """Trigger an on-demand Path MTU probe for a single peer."""
+    data = request.get_json() or {}
+    iface = (data.get("interface") or "").strip()
+    pubkey = (data.get("publicKey") or "").strip()
+    if not iface or not pubkey:
+        return ResponseObject(False, "interface and publicKey are required")
+
+    # Validate interface name — must exist in WireguardConfigurations to be sure
+    # it is a real managed interface (not arbitrary attacker-supplied name).
+    if iface not in WireguardConfigurations:
+        return ResponseObject(False, "unknown interface")
+
+    # Look up endpoint via `wg show <iface> dump`
+    try:
+        dump = subprocess.run(
+            ["wg", "show", iface, "dump"],
+            capture_output=True, text=True, timeout=5, check=True,
+        ).stdout
+    except FileNotFoundError:
+        return ResponseObject(False, "wg is not installed")
+    except subprocess.SubprocessError as exc:
+        return ResponseObject(False, f"wg show failed: {exc}")
+
+    endpoint = None
+    for line in dump.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 9:
+            continue  # interface line
+        if parts[0] == pubkey:
+            endpoint = parts[2]
+            break
+    if not endpoint or endpoint == "(none)":
+        return ResponseObject(False, "Peer has no endpoint (not connected?)")
+
+    # Split host/port; handle IPv4, bare IPv6 (no port), and [IPv6]:port
+    ep_ip_raw = endpoint
+    if ep_ip_raw.startswith("["):
+        # [IPv6]:port
+        bracket_end = ep_ip_raw.find("]")
+        ep_ip_raw = ep_ip_raw[1:bracket_end] if bracket_end > 0 else ep_ip_raw[1:]
+    else:
+        # IPv4:port
+        ep_ip_raw = ep_ip_raw.rsplit(":", 1)[0]
+    ip = _parse_target_ip(ep_ip_raw)
+    if not ip:
+        return ResponseObject(False, f"could not parse endpoint {endpoint}")
+
+    pmtu, source = _probe_pmtu(ip)
+    iface_mtu = _read_iface_mtu(iface)
+
+    def _merge(existing):
+        peers = existing.get("peers") or {}
+        peers[pubkey] = {
+            "iface": iface,
+            "iface_mtu": iface_mtu,
+            "endpoint": endpoint,
+            "pmtu": pmtu,
+            "source": source,
+            "handshake_age_sec": 0,
+        }
+        existing["peers"] = peers
+        existing["generated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    try:
+        _atomic_write_pmtu_state(_merge)
+    except OSError as exc:
+        return ResponseObject(False, f"Failed to update state file: {exc}")
+
+    return ResponseObject(data={
+        "publicKey": pubkey,
+        "interface": iface,
+        "endpoint": endpoint,
+        "pmtu": pmtu,
+        "source": source,
+        "iface_mtu": iface_mtu,
     })
 
 @app.get(f'{APP_PREFIX}/api/getDashboardConfiguration')

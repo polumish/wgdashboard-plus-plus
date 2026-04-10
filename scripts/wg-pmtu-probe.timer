@@ -1,0 +1,12 @@
+[Unit]
+Description=Run WireGuard Path MTU probe hourly
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+RandomizedDelaySec=60
+Persistent=true
+Unit=wg-pmtu-probe.service
+
+[Install]
+WantedBy=timers.target

@@ -464,10 +464,18 @@ watch(() => route.query.id, (newValue) => {
 		</PeerSearch>
 		<!-- Table View -->
 		<div v-if="dashboardStore.Configuration.Server.dashboard_peer_list_display === 'table'" class="table-responsive">
-			<table class="table table-striped table-hover align-middle mb-0">
+			<table class="table table-striped table-hover align-middle mb-0 peer-table-fixed">
+				<colgroup>
+					<col style="width: 14%;">
+					<col style="width: 24%;">
+					<col style="width: 22%;">
+					<col style="width: 14%;">
+					<col style="width: 22%;">
+					<col style="width: 4%;">
+				</colgroup>
 				<thead>
 					<tr class="text-body-secondary">
-						<th style="min-width: 80px" role="button" @click="tableSortBy = 'status'; tableSortAsc = tableSortBy === 'status' ? !tableSortAsc : true" title="Sort by status">
+						<th role="button" @click="tableSortBy = 'status'; tableSortAsc = tableSortBy === 'status' ? !tableSortAsc : true" title="Sort by status">
 							<small class="d-flex align-items-center gap-1">
 								<LocaleText t="Status"></LocaleText>
 								<i class="bi" :class="tableSortBy === 'status' ? (tableSortAsc ? 'bi-sort-up' : 'bi-sort-down') : 'bi-sort-up text-muted opacity-25'" style="font-size: 0.7rem"></i>
@@ -489,7 +497,7 @@ watch(() => route.query.id, (newValue) => {
 							</small>
 						</th>
 							<th><small><LocaleText t="Endpoint"></LocaleText></small></th>
-						<th style="width: 40px"></th>
+						<th></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -527,14 +535,14 @@ watch(() => route.query.id, (newValue) => {
 								{{ peer.name || 'Untitled' }}
 							</strong>
 						</td>
-						<td><small><samp>{{ peer.allowed_ip }}</samp></small></td>
+						<td :title="peer.allowed_ip"><small><samp>{{ peer.allowed_ip }}</samp></small></td>
 						<td>
 							<small class="d-flex flex-column">
 								<span><i class="bi bi-arrow-down text-success me-1"></i>{{ formatTraffic(peer.cumu_receive + peer.total_receive) }}</span>
 								<span><i class="bi bi-arrow-up text-primary me-1"></i>{{ formatTraffic(peer.cumu_sent + peer.total_sent) }}</span>
 							</small>
 						</td>
-						<td><small class="text-muted"><samp>{{ peer.endpoint }}</samp></small></td>
+						<td :title="peer.endpoint"><small class="text-muted"><samp>{{ peer.endpoint }}</samp></small></td>
 						<td @click.stop>
 							<div class="dropdown">
 								<button class="btn btn-sm btn-body rounded-3" data-bs-toggle="dropdown" data-bs-display="static">
@@ -841,5 +849,15 @@ tr.server-row {
 	min-width: 350px;
 	max-width: 550px;
 	z-index: 1061;
+}
+
+/* Peer table: fixed column widths so the layout doesn't reflow when
+   handshake text ("x seconds ago" → "x minutes ago") changes length. */
+.peer-table-fixed { table-layout: fixed; }
+.peer-table-fixed td,
+.peer-table-fixed th {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 </style>

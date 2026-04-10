@@ -234,3 +234,243 @@ class TestDiagnosticsSnapshot:
         assert snapshot["peers"][0]["status"] == "online"
         assert len(snapshot["routes"]) == 2
         assert snapshot["routes"][1]["peer"] == "office-gw"
+
+
+class TestInterfaceCounters:
+    """Tests for the /sys/class/net/<iface>/statistics/ counter integration
+    added for v1.7.0 Network Diagnostics."""
+
+    def test_counters_populated_from_sysfs(self, tmp_path, monkeypatch):
+        """collect_interface_info should read rx/tx/errors/dropped from sysfs."""
+        from modules.WireguardDiagnostics import DiagnosticsCollector
+
+        # Stub _read_iface_counter to return deterministic values per name
+        stub_values = {
+            "rx_packets": 1234,
+            "tx_packets": 5678,
+            "rx_errors": 0,
+            "tx_errors": 2,
+            "rx_dropped": 7,
+            "tx_dropped": 0,
+        }
+        monkeypatch.setattr(
+            DiagnosticsCollector, "_read_iface_counter",
+            staticmethod(lambda iface, name: stub_values.get(name, 0))
+        )
+
+        ip_addr_output = (
+            "4: wg0: <POINTOPOINT,NOARP,UP,LOWER_UP> mtu 1420 qdisc noqueue state UNKNOWN\n"
+            "    inet 10.200.0.1/24 scope global wg0\n"
+        )
+
+        with patch("subprocess.check_output", return_value=ip_addr_output.encode("utf-8")):
+            collector = DiagnosticsCollector()
+            result = collector.collect_interface_info("wg0")
+
+        assert "counters" in result
+        assert result["counters"]["rx_packets"] == 1234
+        assert result["counters"]["tx_packets"] == 5678
+        assert result["counters"]["tx_errors"] == 2
+        assert result["counters"]["rx_dropped"] == 7
+
+    def test_read_iface_counter_missing_file(self, tmp_path, monkeypatch):
+        """_read_iface_counter returns 0 if the sysfs file is missing."""
+        from modules.WireguardDiagnostics import DiagnosticsCollector
+        # Point at a definitely-missing interface
+        result = DiagnosticsCollector._read_iface_counter("nonexistent-iface-xyz", "rx_packets")
+        assert result == 0
+
+
+class TestPmtuStateLoader:
+    """Tests for load_pmtu_state() reading /var/lib/wg-pmtu/state.json."""
+
+    def test_load_valid_state(self, tmp_path, monkeypatch):
+        from modules import WireguardDiagnostics
+        state_file = tmp_path / "state.json"
+        state_file.write_text(json.dumps({
+            "generated_at": "2026-04-10T10:00:00Z",
+            "peers": {
+                "PeerPubKey=": {
+                    "iface": "wg0",
+                    "pmtu": 1400,
+                    "source": "tracepath",
+                }
+            }
+        }))
+        monkeypatch.setattr(WireguardDiagnostics, "PMTU_STATE_FILE", str(state_file))
+
+        peers = WireguardDiagnostics.load_pmtu_state()
+        assert "PeerPubKey=" in peers
+        assert peers["PeerPubKey="]["pmtu"] == 1400
+        assert peers["PeerPubKey="]["source"] == "tracepath"
+
+    def test_load_missing_file(self, tmp_path, monkeypatch):
+        """Missing state file returns empty dict (PMTU is optional aux data)."""
+        from modules import WireguardDiagnostics
+        monkeypatch.setattr(
+            WireguardDiagnostics, "PMTU_STATE_FILE", str(tmp_path / "does-not-exist.json")
+        )
+        assert WireguardDiagnostics.load_pmtu_state() == {}
+
+    def test_load_invalid_json(self, tmp_path, monkeypatch):
+        """Corrupted JSON should not crash — just return empty dict."""
+        from modules import WireguardDiagnostics
+        bad = tmp_path / "state.json"
+        bad.write_text("{ this is not valid json")
+        monkeypatch.setattr(WireguardDiagnostics, "PMTU_STATE_FILE", str(bad))
+        assert WireguardDiagnostics.load_pmtu_state() == {}
+
+
+class TestPmtuSnapshotIntegration:
+    """Tests that build_snapshot attaches PMTU data and generates warnings
+    when detected path MTU is below interface MTU + WG overhead (80)."""
+
+    def _build_with_pmtu(self, monkeypatch, pmtu_state):
+        from modules.WireguardDiagnostics import DiagnosticsCollector
+        from modules import WireguardDiagnostics
+
+        monkeypatch.setattr(WireguardDiagnostics, "load_pmtu_state", lambda: pmtu_state)
+
+        ip_addr_output = (
+            "4: wg0: <POINTOPOINT,NOARP,UP,LOWER_UP> mtu 1320 qdisc noqueue state UNKNOWN\n"
+            "    inet 10.200.0.1/24 scope global wg0\n"
+        )
+        wg_show_output = (
+            "interface: wg0\n"
+            "  public key: SrvKey=\n"
+            "  listening port: 51820\n"
+            "\n"
+            "peer: PeerGood=\n"
+            "  endpoint: 1.2.3.4:51820\n"
+            "  allowed ips: 10.200.0.2/32\n"
+            "  latest handshake: 10 seconds ago\n"
+            "  transfer: 1 MiB received, 1 MiB sent\n"
+            "peer: PeerBad=\n"
+            "  endpoint: 5.6.7.8:51820\n"
+            "  allowed ips: 10.200.0.3/32\n"
+            "  latest handshake: 10 seconds ago\n"
+            "  transfer: 1 MiB received, 1 MiB sent\n"
+        )
+        ip_route_output = "10.200.0.0/24 dev wg0 proto kernel scope link src 10.200.0.1\n"
+
+        call_map = {
+            "ip address show wg0": ip_addr_output.encode("utf-8"),
+            "wg show wg0": wg_show_output.encode("utf-8"),
+            "ip route show dev wg0": ip_route_output.encode("utf-8"),
+        }
+
+        def mock_check_output(cmd, **kwargs):
+            for key, val in call_map.items():
+                if key in cmd:
+                    return val
+            raise subprocess.CalledProcessError(1, cmd)
+
+        with patch("subprocess.check_output", side_effect=mock_check_output):
+            collector = DiagnosticsCollector()
+            return collector.build_snapshot("wg0", protocol="wg")
+
+    def test_pmtu_attached_to_peers(self, monkeypatch):
+        """Each peer should get its PMTU data from load_pmtu_state()."""
+        snapshot = self._build_with_pmtu(monkeypatch, {
+            "PeerGood=": {"pmtu": 1500, "source": "tracepath"},
+            "PeerBad=": {"pmtu": 1300, "source": "kernel"},
+        })
+        peers_by_key = {p["publicKey"]: p for p in snapshot["peers"]}
+        assert peers_by_key["PeerGood="]["pmtu"] == 1500
+        assert peers_by_key["PeerGood="]["pmtuSource"] == "tracepath"
+        assert peers_by_key["PeerBad="]["pmtu"] == 1300
+        assert peers_by_key["PeerBad="]["pmtuSource"] == "kernel"
+
+    def test_pmtu_warning_generated_for_low_path_mtu(self, monkeypatch):
+        """Peer with detected PMTU < interface_mtu + 80 should get a warning."""
+        # Interface MTU is 1320, so required = 1400. 1300 < 1400 → warning.
+        snapshot = self._build_with_pmtu(monkeypatch, {
+            "PeerGood=": {"pmtu": 1500, "source": "tracepath"},  # OK
+            "PeerBad=": {"pmtu": 1300, "source": "kernel"},      # too low
+        })
+        pmtu_warnings = [w for w in snapshot["warnings"] if w.get("type") == "pmtu_below_required"]
+        assert len(pmtu_warnings) == 1
+        assert "1300" in pmtu_warnings[0]["message"]
+        assert "1400" in pmtu_warnings[0]["message"]  # required
+
+    def test_no_pmtu_warning_when_unknown(self, monkeypatch):
+        """Peers without detected PMTU should not produce warnings."""
+        snapshot = self._build_with_pmtu(monkeypatch, {
+            "PeerGood=": {"pmtu": None, "source": "unknown"},
+            "PeerBad=": {"pmtu": None, "source": "unknown"},
+        })
+        pmtu_warnings = [w for w in snapshot["warnings"] if w.get("type") == "pmtu_below_required"]
+        assert len(pmtu_warnings) == 0
+
+
+class TestDashboardPmtuHelpers:
+    """Tests for dashboard.py PMTU helper functions (_parse_target_ip,
+    _atomic_write_pmtu_state)."""
+
+    def test_parse_target_ip_valid_ipv4(self):
+        from dashboard import _parse_target_ip
+        assert _parse_target_ip("1.2.3.4") == "1.2.3.4"
+        assert _parse_target_ip("  10.0.0.1  ") == "10.0.0.1"
+
+    def test_parse_target_ip_valid_ipv6(self):
+        from dashboard import _parse_target_ip
+        assert _parse_target_ip("2001:db8::1") == "2001:db8::1"
+        assert _parse_target_ip("[2001:db8::1]") == "2001:db8::1"
+
+    def test_parse_target_ip_ipv6_zone_id_stripped(self):
+        from dashboard import _parse_target_ip
+        # Zone ID should be stripped before validation
+        assert _parse_target_ip("fe80::1%eth0") == "fe80::1"
+
+    def test_parse_target_ip_rejects_hostname(self):
+        from dashboard import _parse_target_ip
+        assert _parse_target_ip("example.com") is None
+        assert _parse_target_ip("localhost") is None
+
+    def test_parse_target_ip_rejects_garbage(self):
+        from dashboard import _parse_target_ip
+        assert _parse_target_ip("") is None
+        assert _parse_target_ip(None) is None
+        assert _parse_target_ip("not.an.ip.address.xxx") is None
+        assert _parse_target_ip("1.2.3.4; rm -rf /") is None
+
+    def test_atomic_write_pmtu_state(self, tmp_path, monkeypatch):
+        """_atomic_write_pmtu_state reads, mutates, and atomically rewrites."""
+        import dashboard
+        monkeypatch.setattr(dashboard, "PMTU_STATE_DIR", str(tmp_path))
+        monkeypatch.setattr(dashboard, "PMTU_STATE_FILE", str(tmp_path / "state.json"))
+        monkeypatch.setattr(dashboard, "PMTU_LOCK_FILE", str(tmp_path / "state.lock"))
+
+        # Initial write — no existing state
+        def add_peer(state):
+            state.setdefault("peers", {})["PeerA="] = {"pmtu": 1400}
+        dashboard._atomic_write_pmtu_state(add_peer)
+
+        state = json.loads((tmp_path / "state.json").read_text())
+        assert "PeerA=" in state["peers"]
+        assert state["peers"]["PeerA="]["pmtu"] == 1400
+
+        # Second write — merges with existing
+        def add_another(state):
+            state["peers"]["PeerB="] = {"pmtu": 1320}
+        dashboard._atomic_write_pmtu_state(add_another)
+
+        state = json.loads((tmp_path / "state.json").read_text())
+        assert "PeerA=" in state["peers"]
+        assert "PeerB=" in state["peers"]
+
+    def test_atomic_write_handles_corrupt_existing(self, tmp_path, monkeypatch):
+        """If state.json exists but is corrupt, mutate_fn still runs on empty state."""
+        import dashboard
+        monkeypatch.setattr(dashboard, "PMTU_STATE_DIR", str(tmp_path))
+        monkeypatch.setattr(dashboard, "PMTU_STATE_FILE", str(tmp_path / "state.json"))
+        monkeypatch.setattr(dashboard, "PMTU_LOCK_FILE", str(tmp_path / "state.lock"))
+
+        (tmp_path / "state.json").write_text("{ not valid json")
+
+        def add_peer(state):
+            state.setdefault("peers", {})["PeerA="] = {"pmtu": 1400}
+        dashboard._atomic_write_pmtu_state(add_peer)
+
+        state = json.loads((tmp_path / "state.json").read_text())
+        assert "PeerA=" in state["peers"]

@@ -1,0 +1,23 @@
+[Unit]
+Description=WireGuard Path MTU probe
+After=network-online.target wg-quick@.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/wg-pmtu-probe.sh
+TimeoutStartSec=300
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+# Sandboxing: the script only needs to read WG state and write to
+# /var/lib/wg-pmtu. Limit its access to the rest of the filesystem.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/wg-pmtu
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -5,6 +5,28 @@ All notable changes to WgDashboard++ will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to a custom versioning scheme: **X.YZ** where X=major, Y=feature (+0.1), Z=bugfix (+0.01).
 
+## [v1.7.0] - 2026-04-10
+
+### Added
+- **Path MTU monitoring** — new hourly systemd timer (`wg-pmtu-probe.service`) probes path MTU to every active WireGuard peer via kernel route cache → `tracepath` → `ping -M do` bisection → egress MTU fallback. Results are surfaced in Network Diagnostics as `configured / detected` per peer, color-coded (green when there's headroom over `interface MTU + 80 (WG overhead)`, orange when fragmentation is possible, muted when unknown).
+- **On-demand PMTU re-probe button** — `↻` next to each peer's PMTU cell triggers an immediate re-probe for that single peer via `POST /api/pmtu/probe`. Fresh result lands in the UI before the next SSE snapshot.
+- **On-demand MTR traces** — `⁂` button next to each peer opens a modal running `mtr --report --no-dns` against the peer's endpoint and displays the raw per-hop output with `Loss%`, `Avg`, `Wrst`, etc. Useful for diagnosing intermediate drops on the path.
+- **Interface packet counters** — Network Diagnostics Interface section now shows `rx/tx packets`, `err rx/tx`, `drop rx/tx` read from `/sys/class/net/<iface>/statistics/`. Errors and drops turn orange when non-zero.
+- **PMTU warnings in diagnostics** — `pmtu_below_required` warning fires when detected path MTU is below `interface MTU + 80`, propagated through the existing SSE diagnostics stream and the warnings list.
+- **Fixed column widths in peer tables** — both the table view on the configuration page and the diagnostics peer table now use `table-layout: fixed` with explicit column widths, so the layout no longer jumps around when handshake text changes length.
+- **Install script for bare-metal PMTU probe** — `scripts/install-pmtu-probe.sh` installs `iputils-tracepath`/`mtr-tiny`, copies the probe script, and enables the systemd timer. Idempotent.
+
+### Improved
+- **Docker image** — bundles `mtr` and `iputils` (tracepath) in the runtime stage; ships the PMTU probe script and runs it in a background loop from the entrypoint (hourly re-probe). No manual steps for Docker users.
+- **Safer subprocess handling** — all new diagnostic endpoints (`/api/pmtu/probe`, `/api/diagnostics/mtr`) use `subprocess.run([...])` with list arguments and `shell=False`. No shell quoting surface, proper `FileNotFoundError` handling when `mtr`/`tracepath` is missing, proper timeouts that actually kill the child.
+- **State file concurrency** — `/var/lib/wg-pmtu/state.json` writes from both the shell probe and the Python on-demand endpoint are now serialized via `flock` on a sidecar lockfile and use atomic rename. Prevents half-written JSON under load.
+- **IPv6 endpoint parsing** — both the shell probe and the Python endpoint now parse `[2001:db8::1]:51820` correctly via bracket-aware regex, fixing an edge case that previously sent garbage to `ip route get`.
+
+### Fixed
+- **Datetime deprecation warning** — replaced `datetime.utcnow()` with `datetime.now(timezone.utc)` for Python 3.12+ compatibility.
+- **MTR target validation** — target must now be a valid IP address (`ipaddress.ip_address()`), rejecting hostnames and arbitrary strings that previously leaked through a permissive regex.
+- **Peer diagnostics interface restricted** — `/api/pmtu/probe` only accepts interfaces known to `WireguardConfigurations` (can no longer be used to probe arbitrary hosts via an unknown interface name).
+
 ## [v1.6.1] - 2026-04-10
 
 ### Added

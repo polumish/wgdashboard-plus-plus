@@ -94,11 +94,14 @@ RUN . /opt/wgdashboard/src/venv/bin/activate && \
 FROM python:3.14-alpine AS final
 LABEL maintainer="dselen@nerthus.nl"
 
-# Install only the runtime dependencies
+# Install only the runtime dependencies.
+# `mtr` and `iputils` provide mtr and tracepath for Network Diagnostics
+# (on-demand mtr traces and path MTU discovery via tracepath fallback).
 RUN apk add --no-cache \
     iproute2 iptables \
     bash curl procps openrc \
-    tzdata wireguard-tools envsubst
+    tzdata wireguard-tools envsubst \
+    mtr iputils
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Copy only the final binaries from the AWG builder stages
@@ -117,7 +120,7 @@ ENV TZ="Europe/Amsterdam" \
     WGDASH=/opt/wgdashboard
 
 # Create directories needed for operation
-RUN mkdir /data /configs -p ${WGDASH}/src /etc/amnezia/amneziawg
+RUN mkdir /data /configs /var/lib/wg-pmtu -p ${WGDASH}/src /etc/amnezia/amneziawg
 
 # Copy the venv and source files from local compiled locations or repos
 COPY ./src ${WGDASH}/src
@@ -125,6 +128,9 @@ COPY --from=pip-builder /opt/wgdashboard/src/venv /opt/wgdashboard/src/venv
 COPY ./docker/wg0.conf.template /tmp/wg0.conf.template
 # Copy in the runtime script, essential.
 COPY ./docker/entrypoint.sh /entrypoint.sh
+# Path MTU probe script (run periodically from entrypoint)
+COPY ./scripts/wg-pmtu-probe.sh /usr/local/bin/wg-pmtu-probe.sh
+RUN chmod +x /usr/local/bin/wg-pmtu-probe.sh
 
 # First WireGuard interface template
 RUN export out_adapt=$(ip -o -4 route show to default | awk '{print $NF}') \

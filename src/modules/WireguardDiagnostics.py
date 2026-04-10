@@ -3,6 +3,7 @@ WireGuard Diagnostics — collects interface, peer, and route data
 for the live diagnostic terminal.
 """
 
+import os
 import subprocess
 import re
 import time
@@ -11,11 +12,38 @@ import threading
 from datetime import datetime
 
 
+PMTU_STATE_FILE = "/var/lib/wg-pmtu/state.json"
+
+
+def load_pmtu_state() -> dict:
+    """Load the latest Path MTU probe results produced by
+    /usr/local/bin/wg-pmtu-probe.sh. Returns an empty dict if the
+    file is missing or invalid — PMTU is optional data.
+    """
+    try:
+        with open(PMTU_STATE_FILE, "r") as f:
+            data = json.load(f)
+        return data.get("peers", {}) or {}
+    except (OSError, ValueError):
+        return {}
+
+
 class DiagnosticsCollector:
     """Collects raw diagnostic data from system commands."""
 
+    @staticmethod
+    def _read_iface_counter(interface: str, name: str) -> int:
+        """Read a single counter from /sys/class/net/<iface>/statistics/<name>."""
+        try:
+            with open(f"/sys/class/net/{interface}/statistics/{name}") as f:
+                return int(f.read().strip())
+        except (OSError, ValueError):
+            return 0
+
     def collect_interface_info(self, interface: str) -> dict | None:
-        """Collect interface state from `ip address show <iface>`."""
+        """Collect interface state from `ip address show <iface>` plus
+        packet counters from /sys/class/net/<iface>/statistics/.
+        """
         try:
             output = subprocess.check_output(
                 f"ip address show {interface}",
@@ -34,11 +62,22 @@ class DiagnosticsCollector:
 
         fwmark = None
 
+        # Per-interface error/drop counters (cumulative since interface up)
+        counters = {
+            "rx_packets": self._read_iface_counter(interface, "rx_packets"),
+            "tx_packets": self._read_iface_counter(interface, "tx_packets"),
+            "rx_errors": self._read_iface_counter(interface, "rx_errors"),
+            "tx_errors": self._read_iface_counter(interface, "tx_errors"),
+            "rx_dropped": self._read_iface_counter(interface, "rx_dropped"),
+            "tx_dropped": self._read_iface_counter(interface, "tx_dropped"),
+        }
+
         return {
             "status": status,
             "mtu": mtu,
             "address": address,
             "fwmark": fwmark,
+            "counters": counters,
         }
 
     def collect_peers(self, interface: str, protocol: str = "wg", threshold: int = 300) -> tuple[dict | None, list]:
@@ -256,10 +295,40 @@ class DiagnosticsCollector:
         for peer in peers:
             peer["name"] = peer_names.get(peer["publicKey"], peer["publicKey"][:12] + "…")
 
+        # Attach PMTU data (from /var/lib/wg-pmtu/state.json, populated by
+        # wg-pmtu-probe.sh systemd timer). Fields per peer: pmtu, pmtuSource.
+        pmtu_state = load_pmtu_state()
+        iface_mtu_val = info.get("mtu")
+        for peer in peers:
+            entry = pmtu_state.get(peer["publicKey"])
+            if entry:
+                peer["pmtu"] = entry.get("pmtu")
+                peer["pmtuSource"] = entry.get("source")
+            else:
+                peer["pmtu"] = None
+                peer["pmtuSource"] = None
+
         routes = self.collect_routes(interface)
         annotated_routes, warnings = self.cross_reference(
             routes, peers, info.get("address", "")
         )
+
+        # PMTU warnings — interface MTU + 80 (WG overhead) must fit into path MTU
+        WG_OVERHEAD = 80
+        if iface_mtu_val:
+            required = iface_mtu_val + WG_OVERHEAD
+            for peer in peers:
+                if peer.get("pmtu") is not None and peer["pmtu"] < required:
+                    warnings.append({
+                        "type": "pmtu_below_required",
+                        "target": peer["name"],
+                        "message": (
+                            f"{peer['name']} — path MTU {peer['pmtu']} "
+                            f"below required {required} "
+                            f"(interface {iface_mtu_val} + {WG_OVERHEAD} WG overhead), "
+                            f"source: {peer.get('pmtuSource') or 'unknown'}"
+                        ),
+                    })
 
         # Add peer-level warnings (offline peers)
         for peer in peers:
@@ -274,6 +343,7 @@ class DiagnosticsCollector:
             "status": info["status"],
             "address": info["address"],
             "mtu": info["mtu"],
+            "counters": info.get("counters", {}),
             "fwmark": iface_data.get("fwmark"),
             "listenPort": iface_data.get("listenPort"),
             "publicKey": iface_data.get("publicKey"),

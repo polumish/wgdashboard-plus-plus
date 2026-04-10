@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-    <a href="https://github.com/polumish/wgdashboard-plus-plus/releases"><img src="https://img.shields.io/badge/Release_Notes-v1.6.1-brightgreen?style=for-the-badge"></a>
+    <a href="https://github.com/polumish/wgdashboard-plus-plus/releases"><img src="https://img.shields.io/badge/Release_Notes-v1.7.0-brightgreen?style=for-the-badge"></a>
     <a href="https://github.com/polumish/wgdashboard-plus-plus/discussions"><img src="https://img.shields.io/badge/Discussions-welcome-purple?style=for-the-badge&logo=github"></a>
     <a href="https://git.half.net.ua/polumish/wgdashboard-plus-plus/-/issues"><img src="https://img.shields.io/badge/Bug_Reports-welcome-orange?style=for-the-badge&logo=gitlab"></a>
 </p>
@@ -127,6 +127,37 @@ Warning types:
 | `orphan_route` | Kernel route exists but no matching peer AllowedIPs |
 | `policy_route_missing` | Gateway peer exists but no policy routes applied |
 | `policy_route_inactive` | Policy route exists but interface is down |
+| `pmtu_below_required` | Detected path MTU is below `interface MTU + 80` (WG overhead) — fragmentation possible |
+
+### Path MTU Monitoring (v1.7.0+)
+
+Continuous visibility into the real path MTU between the dashboard host and every active WireGuard peer. Helps catch network-level drops before users start complaining about "the internet is slow".
+
+- **Hourly background probe** — `wg-pmtu-probe.sh` runs via systemd timer (bare-metal) or entrypoint loop (Docker). For each active peer it tries kernel route cache → `tracepath` → `ping -M do` bisection → egress interface MTU.
+- **Surfaced in Network Diagnostics** — PMTU column in the peer table shows `configured / detected` with color coding. Green when there's headroom, orange when fragmentation is likely, muted when unknown.
+- **On-demand re-probe** — `↻` button next to each PMTU cell triggers an immediate probe for a single peer (no need to wait for the next hourly run).
+- **On-demand MTR traces** — `⁂` button opens a modal with `mtr --report --no-dns` output so you can see per-hop loss and latency.
+- **Interface packet counters** — Interface section shows `rx/tx packets`, `err rx/tx`, `drop rx/tx` from `/sys/class/net/<iface>/statistics/`. Non-zero errors or drops turn orange.
+- **PMTU warning** — `pmtu_below_required` fires when detected path MTU is below `interface MTU + 80` (WG header overhead).
+
+#### PMTU API
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/pmtu/probe` | On-demand probe for one peer. Body: `{"interface": "wg0", "publicKey": "..."}` |
+| `POST /api/diagnostics/mtr` | Run mtr against an IP. Body: `{"target": "1.2.3.4", "cycles": 10}` |
+
+Both endpoints require authentication. The MTR endpoint accepts only valid IP addresses (hostnames are rejected).
+
+#### Installing the PMTU probe (bare-metal)
+
+```bash
+sudo bash scripts/install-pmtu-probe.sh
+```
+
+Installs `iputils-tracepath` and `mtr-tiny`, copies the probe script to `/usr/local/bin`, and enables the hourly systemd timer. Idempotent — safe to re-run.
+
+Docker users don't need to do anything — the image bundles `mtr` and `iputils`, and the entrypoint runs the probe in a background loop.
 
 ### Automatic Policy Routing (v1.6.0+)
 
@@ -235,7 +266,7 @@ WgDashboard++ uses its own versioning independent of upstream:
 - **Y** — feature releases (+0.1)
 - **Z** — bugfixes (+0.01)
 
-Current: **v1.6.1**
+Current: **v1.7.0**
 
 ## Feature Status
 

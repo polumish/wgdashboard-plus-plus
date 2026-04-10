@@ -32,6 +32,12 @@ deploy:
     - cd src
     - source venv/bin/activate
     - pip install -r requirements.txt --quiet 2>/dev/null
+    # Install or update the Path MTU probe (idempotent — reruns are safe).
+    # Installs iputils-tracepath/mtr-tiny and enables the hourly systemd timer.
+    - |
+      if [ -f /opt/WGDashboard/scripts/install-pmtu-probe.sh ]; then
+        sudo bash /opt/WGDashboard/scripts/install-pmtu-probe.sh || echo "WARN: PMTU probe install failed; continuing deploy"
+      fi
     - ./wgd.sh restart
     - echo "Gunicorn restarted"
     - sleep 5
