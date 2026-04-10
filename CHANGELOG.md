@@ -5,6 +5,36 @@ All notable changes to WgDashboard++ will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to a custom versioning scheme: **X.YZ** where X=major, Y=feature (+0.1), Z=bugfix (+0.01).
 
+## [v1.6.1] - 2026-04-10
+
+### Added
+- **Centralized Interface MTU setting** — new field in Settings → WireGuard Configuration Settings for the default MTU applied to new configurations. Does not override existing ones
+- **Per-network MTU** — MTU field in each network's Configuration Settings (populated from the `[Interface]` section)
+- **MTU display on network cards** — each configuration in the home list now shows its interface MTU badge
+- **Routes behind server peers** — `Allowed IPs` can include extra CIDRs outside the tunnel subnet (e.g. the server's own LAN IP). The downloaded client config only includes tunnel IPs in `[Interface] Address`; extra CIDRs stay in the server-side `[Peer] AllowedIPs` so clients can reach them through the tunnel
+- **Auto-start new configurations** — newly created WireGuard configurations are started and added to the autostart list automatically. No more "why isn't my tunnel working" after create
+
+### Improved
+- **MTU priority for downloaded peer configs** — now `OverridePeerSettings.MTU` → network `[Interface]` MTU → legacy per-peer MTU. Setting the network MTU propagates to all client downloads without per-peer editing
+- **`_syncGatewaySubnetsToConfig` for Server peers** — routes behind a server peer (CIDRs in `allowed_ip` outside the interface subnet) are now included in `EndpointAllowedIPs` so other clients in the network can reach them
+- **Create-peer validation** — CIDRs outside the tunnel subnet are accepted as routes behind the peer; at least one tunnel IP is still required
+- **`is_gateway=2` (Server) preserved** — peer type was being collapsed from Server (2) to Gateway (1) during creation because of a truthy check
+
+### Fixed
+- **Cannot toggle interfaces on/off when routes overlap** — `wg-quick up` fails fatally if any `AllowedIPs` route already exists on another interface (`RTNETLINK answers: File exists`). Replaced with a manual bring-up that adds routes gracefully and skips duplicates. `wg-quick down` is unchanged
+- **`wg setconf` parse error on config files with loose permissions** — `wg-quick strip` emits a warning to stderr that was being mixed into stdout via `stderr=STDOUT` and corrupted the config piped to `wg setconf`. Warnings are now discarded
+- **`UnboundLocalError: mode` on peer delete and add** — `_syncGatewaySubnetsToConfig` used `mode` before it was assigned, producing a 500 response that logged the user out of the dashboard
+- **Client config `[Interface] Address` polluted with non-tunnel IPs** — a server peer with `Allowed IPs = 10.200.5.1/32, 10.0.50.163/32` used to generate `Address = 10.200.5.1/32, 10.0.50.163/32` in the client config, conflicting with the server's real ethernet IP. Now only CIDRs within the WG interface subnet are included
+- **Default MTU hardcoded to 1320 in code** — now defaults to 1420 (WireGuard standard); users set the environment-specific value via Settings
+
+## [v1.6.0] - 2026-04-09
+
+### Added
+- **Automatic Policy Routing Manager** — source-based routing for WireGuard interfaces that share destination networks. Per-interface routing tables (100–252) with collision resolution, auto-sync on interface toggle, gateway-peer CRUD, startup, and backup restore. Legacy rule migration cleans up old rules without a `to` clause
+- **Policy Routing UI** — Settings → Policy Routing tab with read-only rules table; Route badge on gateway peers with per-peer popover showing routes
+- **Policy Routing API** — `GET /api/policyRouting/status`, `GET /api/policyRouting/status/<config>`, `POST /api/applyPolicyRoutes/<config>`
+- **Diagnostics** — `policy_route_missing` and `policy_route_inactive` warnings
+
 ## [v1.5.1] - 2026-04-08
 
 ### Fixed

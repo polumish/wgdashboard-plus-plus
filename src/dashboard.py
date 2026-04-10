@@ -653,6 +653,12 @@ def API_addWireguardConfiguration():
                     pass
         # mesh: leave empty — per-peer default = config subnet (handled in addPeers)
         newWc.storeConfigurationInfo()
+        # Auto-start the interface and add to autostart list so it survives reboot
+        try:
+            if not newWc.getStatus():
+                newWc.toggleConfiguration()
+        except Exception as e:
+            app.logger.warning(f"Auto-start failed for new configuration {newWc.Name}: {e}")
     return ResponseObject()
 
 @app.get(f'{APP_PREFIX}/api/toggleWireguardConfiguration')
