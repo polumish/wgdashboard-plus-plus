@@ -32,7 +32,7 @@ export default {
 		}
 	},
 	mounted(){
-		this.mtuValue = this.store.Configuration.WireGuardConfiguration?.interface_mtu || "1320";
+		this.mtuValue = this.store.Configuration.WireGuardConfiguration?.interface_mtu || "1420";
 	},
 	methods: {
 		async saveMTU(){

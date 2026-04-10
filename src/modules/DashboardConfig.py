@@ -94,7 +94,7 @@ class DashboardConfig:
             },
             "WireGuardConfiguration": {
                 "autostart": "",
-                "interface_mtu": "1320"
+                "interface_mtu": "1420"
             },
             "Backup": {
                 "backup_path": "",

@@ -572,7 +572,7 @@ def API_suggestNewConfiguration():
     return ResponseObject(True, data={
         "address": suggestedAddress,
         "listenPort": suggestedPort,
-        "defaultMTU": defaultMTU or "1320",
+        "defaultMTU": defaultMTU or "1420",
         "usedAddresses": sorted(list(usedSubnets)),
         "usedPorts": sorted(list(usedPorts)),
     })
