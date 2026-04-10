@@ -5,7 +5,14 @@ All notable changes to WgDashboard++ will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to a custom versioning scheme: **X.YZ** where X=major, Y=feature (+0.1), Z=bugfix (+0.01).
 
-## [v1.7.0] - 2026-04-10
+## [v1.7.1] - 2026-04-10
+
+### Fixed
+- **`wg-pmtu-probe.sh` exited early on grep no-match** — `grep -oP` returns exit code 1 when no match is found, which tripped `set -e`/`pipefail` and caused the probe to abort after the first peer. All grep pipelines now tolerate no-match via `|| true`. Symptom on prod: systemd service failed with exit 1 and empty state.json.
+
+### Improved
+- **Parallelized PMTU probe** — peers are now probed in parallel (8 workers by default via `PROBE_PARALLEL` env var, using `xargs -P`). Wall-clock time for a full run on prod dropped from ~17 minutes (sequential worst case) to ~2 minutes. Each worker writes its JSON fragment to a tempfile; the main script assembles the final state file atomically at the end.
+- **`TimeoutStartSec=1200` in systemd unit** — headroom for larger peer counts. Script still caps per-peer tracepath at 8 seconds.
 
 ### Added
 - **Path MTU monitoring** — new hourly systemd timer (`wg-pmtu-probe.service`) probes path MTU to every active WireGuard peer via kernel route cache → `tracepath` → `ping -M do` bisection → egress MTU fallback. Results are surfaced in Network Diagnostics as `configured / detected` per peer, color-coded (green when there's headroom over `interface MTU + 80 (WG overhead)`, orange when fragmentation is possible, muted when unknown).

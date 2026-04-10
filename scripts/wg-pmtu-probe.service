@@ -6,7 +6,11 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/wg-pmtu-probe.sh
-TimeoutStartSec=300
+# A full probe of ~100 peers with tracepath fallbacks can take several
+# minutes. 20 minutes is comfortable headroom; the script itself caps
+# tracepath to 8s per peer so it can't runaway beyond ~100 × 16s ≈ 27m
+# in the extreme worst case (all tracepath+ping misses).
+TimeoutStartSec=1200
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
