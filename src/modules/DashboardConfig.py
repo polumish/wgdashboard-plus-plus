@@ -93,7 +93,8 @@ class DashboardConfig:
                 "session_timeout": "3600",
             },
             "WireGuardConfiguration": {
-                "autostart": ""
+                "autostart": "",
+                "interface_mtu": "1320"
             },
             "Backup": {
                 "backup_path": "",

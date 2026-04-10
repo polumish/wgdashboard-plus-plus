@@ -568,9 +568,11 @@ def API_suggestNewConfiguration():
                 if p not in usedPorts:
                     suggestedPort = p
                     break
+    _, defaultMTU = DashboardConfig.GetConfig("WireGuardConfiguration", "interface_mtu")
     return ResponseObject(True, data={
         "address": suggestedAddress,
         "listenPort": suggestedPort,
+        "defaultMTU": defaultMTU or "1320",
         "usedAddresses": sorted(list(usedSubnets)),
         "usedPorts": sorted(list(usedPorts)),
     })

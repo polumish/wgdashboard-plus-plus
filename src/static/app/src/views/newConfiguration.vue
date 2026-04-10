@@ -37,6 +37,7 @@ export default {
 				PostUp: "",
 				PostDown: "",
 				Table: "",
+				MTU: "",
 				NetworkMode: "mesh",
 				Protocol: "wg",
 				Jc: 5,
@@ -87,6 +88,8 @@ export default {
 						this.newConfiguration.Address = res.data.address
 					if (!this.newConfiguration.ListenPort && res.data.listenPort)
 						this.newConfiguration.ListenPort = res.data.listenPort
+					if (!this.newConfiguration.MTU && res.data.defaultMTU)
+						this.newConfiguration.MTU = res.data.defaultMTU
 				}
 			})
 		},
@@ -347,6 +350,18 @@ export default {
 								<LocaleText t="Invalid port"></LocaleText>
 							</div>
 						</div>
+					</div>
+				</div>
+				<div class="card rounded-3 shadow">
+					<div class="card-header">
+						<LocaleText t="MTU"></LocaleText>
+					</div>
+					<div class="card-body">
+						<input type="number" class="form-control" placeholder="576-9000" id="MTU"
+						       min="576"
+						       max="9000"
+						       v-model="this.newConfiguration.MTU"
+						       :disabled="this.loading">
 					</div>
 				</div>
 				<div class="card rounded-3 shadow">

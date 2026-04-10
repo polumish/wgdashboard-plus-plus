@@ -91,10 +91,13 @@ export default {
 					<small class="text-success-emphasis col-6" :class="{'col-md-3': this.display === 'List'}">
 						<i class="bi bi-arrow-up me-2"></i>{{c.DataUsage.Sent > 0 ? c.DataUsage.Sent.toFixed(4) : 0}} GB
 					</small>
-					<small class="col-6" :class="{'col-md-3 text-md-end ': this.display === 'List'}">
+					<small class="col-6" :class="{'col-md-2': this.display === 'List'}">
 						<span class="dot me-2" :class="{active: c.ConnectedPeers > 0}"></span>
 						{{c.ConnectedPeers}} / {{c.TotalPeers}}
 						<LocaleText t="Peers"></LocaleText>
+					</small>
+					<small class="col-6 text-muted" :class="{'col-md-1 text-md-end': this.display === 'List'}" v-if="c.MTU">
+						<i class="bi bi-arrows-expand me-1"></i>MTU {{c.MTU}}
 					</small>
 				</div>
 				<div class="d-flex gap-2 " :class="[this.display === 'Grid' ? 'flex-column': 'gap-lg-3 flex-column flex-lg-row']">

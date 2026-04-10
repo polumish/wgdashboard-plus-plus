@@ -166,6 +166,18 @@ const deleteConfigurationModal = ref(false)
 										       id="configuration_listen_port">
 
 									</div>
+									<div>
+										<label for="configuration_mtu" class="form-label">
+											<small class="text-muted">
+												<LocaleText t="MTU"></LocaleText>
+											</small>
+										</label>
+										<input type="number" class="form-control form-control-sm rounded-3"
+										       :disabled="saving"
+										       v-model="data.MTU"
+										       min="576" max="9000"
+										       id="configuration_mtu">
+									</div>
 									<div class="accordion mt-2" id="editConfigurationOptionalAccordion">
 										<div class="accordion-item">
 											<h2 class="accordion-header">

@@ -91,10 +91,17 @@ class WireguardConfiguration:
                     else:
                         setattr(self, i, str(data[i]))
 
+            # Use MTU from request data, or fall back to global default
+            if not self.MTU:
+                _, defaultMTU = self.DashboardConfig.GetConfig("WireGuardConfiguration", "interface_mtu")
+                if defaultMTU:
+                    self.MTU = defaultMTU
+
             self.__parser["Interface"] = {
                 "PrivateKey": self.PrivateKey,
                 "Address": self.Address,
                 "ListenPort": self.ListenPort,
+                "MTU": self.MTU,
                 "PreUp": f"{self.PreUp}",
                 "PreDown": f"{self.PreDown}",
                 "PostUp": f"{self.PostUp}",
@@ -1030,6 +1037,7 @@ class WireguardConfiguration:
             "TotalPeers": len(self.Peers),
             "Protocol": self.Protocol,
             "Table": self.Table,
+            "MTU": self.MTU,
             "Info": self.configurationInfo.model_dump()
         }
 
@@ -1131,7 +1139,7 @@ class WireguardConfiguration:
         dataChanged = False
         with open(self.configPath, 'r') as f:
             original = [l.rstrip("\n") for l in f.readlines()]
-            allowEdit = ["Address", "PreUp", "PostUp", "PreDown", "PostDown", "ListenPort", "Table"]
+            allowEdit = ["Address", "PreUp", "PostUp", "PreDown", "PostDown", "ListenPort", "Table", "MTU"]
             if self.Protocol == 'awg':
                 allowEdit += ["Jc", "Jmin", "Jmax", "S1", "S2", "H1", "H2", "H3", "H4"]
             start = original.index("[Interface]")
