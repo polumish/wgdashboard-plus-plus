@@ -917,13 +917,88 @@ class WireguardConfiguration:
                 return False, str(exc.output.strip().decode("utf-8"))
         else:
             try:
-                check = subprocess.check_output(f"{self.Protocol}-quick up {self.Name}", shell=True, stderr=subprocess.STDOUT)
+                self.__bringUpInterface()
                 self.addAutostart()
-            except subprocess.CalledProcessError as exc:
-                return False, str(exc.output.strip().decode("utf-8"))
+            except Exception as exc:
+                return False, str(exc)
         self.__parseConfigurationFile()
         self.getStatus()
         return True, None
+
+    def __bringUpInterface(self):
+        """Bring up WireGuard interface manually instead of wg-quick.
+
+        wg-quick fails fatally when any route from AllowedIPs already exists
+        on another interface. This method replicates wg-quick up but adds
+        routes gracefully, skipping those that already exist.
+        """
+        name = self.Name
+        protocol = self.Protocol
+
+        # 1. Create interface and load config
+        subprocess.check_output(f"ip link add {name} type wireguard", shell=True, stderr=subprocess.STDOUT)
+        try:
+            # Use wg-quick strip to get the pure WireGuard config (no wg-quick directives)
+            stripped = subprocess.check_output(f"{protocol}-quick strip {name}", shell=True, stderr=subprocess.STDOUT)
+            proc = subprocess.run(f"wg setconf {name} /dev/stdin", shell=True, input=stripped,
+                                  capture_output=True)
+            if proc.returncode != 0:
+                raise subprocess.CalledProcessError(proc.returncode, "wg setconf", proc.stderr)
+
+            # 2. Re-read config for Address, MTU, PostUp
+            self.__parseConfigurationFile()
+
+            # 3. Add addresses
+            for addr in self.Address.split(","):
+                addr = addr.strip()
+                if addr:
+                    subprocess.check_output(f"ip address add {addr} dev {name}",
+                                            shell=True, stderr=subprocess.STDOUT)
+
+            # 4. Determine MTU and bring up
+            mtu = self.MTU.strip() if self.MTU.strip() else "1420"
+            subprocess.check_output(f"ip link set mtu {mtu} up dev {name}",
+                                    shell=True, stderr=subprocess.STDOUT)
+
+            # 5. Add routes from AllowedIPs — skip if already exists
+            self.__addRoutesFromConfig(name)
+
+            # 6. Run PostUp if set
+            if self.PostUp.strip():
+                subprocess.check_output(self.PostUp.strip().replace("%i", name),
+                                        shell=True, stderr=subprocess.STDOUT)
+
+        except Exception:
+            # Cleanup on failure
+            subprocess.run(f"ip link delete dev {name}", shell=True, capture_output=True)
+            raise
+
+    def __addRoutesFromConfig(self, interface_name: str):
+        """Add routes for all AllowedIPs in peers, skipping duplicates."""
+        with open(self.configPath, 'r') as f:
+            config_text = f.read()
+
+        # Parse AllowedIPs from all [Peer] sections
+        for line in config_text.splitlines():
+            line = line.strip()
+            if line.lower().startswith("allowedips"):
+                _, _, value = line.partition("=")
+                for cidr in value.split(","):
+                    cidr = cidr.strip()
+                    if not cidr:
+                        continue
+                    # Skip the peer's own tunnel address (/32 in the interface subnet)
+                    try:
+                        net = ipaddress.ip_network(cidr, strict=False)
+                    except ValueError:
+                        continue
+                    # Determine ip version
+                    ip_ver = "-4" if net.version == 4 else "-6"
+                    # Add route, ignore "File exists" error
+                    subprocess.run(
+                        f"ip {ip_ver} route add {cidr} dev {interface_name}",
+                        shell=True, capture_output=True
+                    )
 
     def getPeersList(self):
         return self.Peers
