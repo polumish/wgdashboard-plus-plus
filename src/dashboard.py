@@ -1294,7 +1294,10 @@ def API_PmtuProbe():
     if iface not in WireguardConfigurations:
         return ResponseObject(False, "unknown interface")
 
-    # Look up endpoint via `wg show <iface> dump`
+    # Look up endpoint via `wg show <iface> dump`.
+    # Single-interface dump format (tab-separated, 8 columns per peer):
+    #   interface line (4 cols): privkey pubkey listen_port fwmark
+    #   peer line      (8 cols): pubkey psk endpoint allowed_ips last_hs rx tx keepalive
     try:
         dump = subprocess.run(
             ["wg", "show", iface, "dump"],
@@ -1308,8 +1311,10 @@ def API_PmtuProbe():
     endpoint = None
     for line in dump.splitlines():
         parts = line.split("\t")
-        if len(parts) < 9:
-            continue  # interface line
+        # Peer lines have 8 columns; interface line has 4. Skip the
+        # interface line and any unexpected shorter rows.
+        if len(parts) < 8:
+            continue
         if parts[0] == pubkey:
             endpoint = parts[2]
             break
