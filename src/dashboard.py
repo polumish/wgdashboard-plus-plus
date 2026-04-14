@@ -2038,6 +2038,9 @@ def API_addPeers(configName):
                     _configDefaultEAIP = f'{_ipaddress.ip_interface(_addr).ip}/32'
                 except (ValueError, Exception):
                     _configDefaultEAIP = _addr
+                _routed = (getattr(_wc.configurationInfo, 'RoutedLANSubnets', '') or '').strip()
+                if _routed:
+                    _configDefaultEAIP = f'{_configDefaultEAIP}, {_routed}'
             else:  # mesh
                 _configDefaultEAIP = AllPolicyRouting.config_subnet(_wc) or DashboardConfig.GetConfig("Peers", "peer_endpoint_allowed_ip")[1]
             endpoint_allowed_ip: str = data.get('endpoint_allowed_ip', _configDefaultEAIP)
