@@ -5,6 +5,11 @@ All notable changes to WgDashboard++ will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to a custom versioning scheme: **X.YZ** where X=major, Y=feature (+0.1), Z=bugfix (+0.01).
 
+## [v1.7.3] - 2026-05-08
+
+### Fixed
+- **Policy routing rules disappear after gunicorn restart on multi-interface deployments** — the primary `AllPolicyRouting.sync_all()` call at module-level in `dashboard.py` runs *before* gunicorn attaches its file log handler, so any failure (intermittent and observed in production with 12 active WireGuard interfaces) is silent. When sync fails, every gateway peer that depends on per-interface routing tables loses connectivity on next restart — the symptom reported in production: "all peers dropped except one" after deploying v1.7.2. Re-introduced the `post_worker_init` fallback in `gunicorn.conf.py` that re-runs `sync_all()` after gunicorn has fully initialized, so a primary failure is recovered automatically and a successful re-application is logged to `error_*.log` (search `PolicyRouting sync_all re-applied`). This mitigation existed as an uncommitted local fix in the prod working tree but was lost when v1.7.2 reset the tree to the official branch — committing it makes deploys idempotent.
+
 ## [v1.7.2] - 2026-05-08
 
 ### Fixed
