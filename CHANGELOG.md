@@ -5,6 +5,13 @@ All notable changes to WgDashboard++ will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to a custom versioning scheme: **X.YZ** where X=major, Y=feature (+0.1), Z=bugfix (+0.01).
 
+## [v1.7.4] - 2026-05-08
+
+### Fixed
+- **`PolicyRoutingManager.cleanup_legacy_rules()` was wiping system-reserved table 100** — the manager assumed it owned routing tables 100–252 and flushed all of them on every `sync_all()`. On Halfnet prod, table 100 holds the Hetzner gateway default route (`default via 10.0.50.249 dev eth0`); the priority-32765 system rule routes outbound from 10.0.50.15 through that table. When `sync_all()` flushed it, all WG handshake replies (which leave the host with eth0 source) had no route, and 90 peers across 12 interfaces dropped to 16 reachable. Fixed by introducing `RESERVED_TABLES = {100}` and shrinking the owned pool to `[101, 252]`. Both `_table_id()` (assignment) and `cleanup_legacy_rules()` (flush) now skip reserved tables. Tests updated to assert `101 ≤ tid ≤ 252`.
+
+  This bug had been latent since v1.6.0 — it surfaced only after v1.7.3 made the fallback `sync_all()` reliable, exposing the destructive flush every restart.
+
 ## [v1.7.3] - 2026-05-08
 
 ### Fixed

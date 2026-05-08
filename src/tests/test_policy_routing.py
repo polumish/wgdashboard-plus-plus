@@ -61,7 +61,7 @@ class TestTableId:
         mgr = PolicyRoutingManager()
         for name in ["wg0", "wg1", "wg-office", "nm-halfnet", "full-halfnet"]:
             tid = mgr._table_id(name)
-            assert 100 <= tid <= 252, f"{name} got table_id {tid}"
+            assert 101 <= tid <= 252, f"{name} got table_id {tid}"
 
     def test_different_configs_different_ids(self):
         PolicyRoutingManager, _ = _import_manager()
@@ -77,8 +77,8 @@ class TestTableId:
         t1 = mgr._table_id("Full-Halfnet")
         t2 = mgr._table_id("nm-halfnet")
         assert t1 != t2, f"Collision not resolved: both got {t1}"
-        assert 100 <= t1 <= 252
-        assert 100 <= t2 <= 252
+        assert 101 <= t1 <= 252
+        assert 101 <= t2 <= 252
 
     def test_collision_resolution_cached(self):
         """After collision resolution, repeated calls return same ID."""

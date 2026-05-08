@@ -13,6 +13,16 @@ from dataclasses import dataclass, asdict
 
 logger = logging.getLogger(__name__)
 
+# Routing tables that are typically used by other system components
+# (Hetzner gateway routing, wg-quick built-in, custom systemd-networkd setups)
+# and MUST NOT be flushed or assigned to. Skipped both in cleanup_legacy_rules
+# and in _table_id assignment.
+RESERVED_TABLES = {100}
+
+# Pool of table IDs the manager owns. Excludes RESERVED_TABLES.
+TABLE_ID_MIN = 101
+TABLE_ID_MAX = 252
+
 
 @dataclass
 class PolicyRule:
@@ -38,7 +48,8 @@ class PolicyRoutingManager:
         self._configurations_fn = configurations_fn
 
     def _table_id(self, config_name: str) -> int:
-        """Deterministic routing table ID 100-252, with collision resolution.
+        """Deterministic routing table ID in [TABLE_ID_MIN, TABLE_ID_MAX], skipping
+        RESERVED_TABLES, with collision resolution.
 
         Thread-safety note: this method reads/writes _table_id_map without
         the lock. It is safe because callers (apply_rules, sync_all) run
@@ -48,20 +59,21 @@ class PolicyRoutingManager:
         if config_name in self._table_id_map:
             return self._table_id_map[config_name]
 
+        pool_size = TABLE_ID_MAX - TABLE_ID_MIN + 1  # tables in our owned range
         h = int(hashlib.sha1(config_name.encode()).hexdigest(), 16)
-        candidate = 100 + (h % 153)
-        used = set(self._table_id_map.values())
+        candidate = TABLE_ID_MIN + (h % pool_size)
+        used = set(self._table_id_map.values()) | RESERVED_TABLES
 
-        if len(used) >= 153:
-            logger.error("_table_id: all 153 table IDs exhausted, reusing %d for %s", candidate, config_name)
+        if len(self._table_id_map) >= pool_size - len(RESERVED_TABLES):
+            logger.error("_table_id: pool exhausted, reusing %d for %s", candidate, config_name)
             self._table_id_map[config_name] = candidate
             return candidate
 
         while candidate in used:
-            logger.warning("table_id collision: %d already used, shifting +1 for %s", candidate, config_name)
+            logger.warning("table_id collision/reserved: %d, shifting +1 for %s", candidate, config_name)
             candidate += 1
-            if candidate > 252:
-                candidate = 100
+            if candidate > TABLE_ID_MAX:
+                candidate = TABLE_ID_MIN
 
         self._table_id_map[config_name] = candidate
         return candidate
@@ -235,8 +247,13 @@ class PolicyRoutingManager:
             res = self._run(["ip", "rule", "del", "priority", "100"])
             if res.returncode != 0:
                 break
-        # Flush all tables in the 100-252 range that we use
-        for table_id in range(100, 253):
+        # Flush all tables we own. RESERVED_TABLES are touched by other system
+        # components (e.g. table 100 holds the Hetzner gateway default route on
+        # Halfnet prod) and must not be flushed — wiping them broke 90 peers
+        # during the v1.7.3 deploy until manually restored.
+        for table_id in range(TABLE_ID_MIN, TABLE_ID_MAX + 1):
+            if table_id in RESERVED_TABLES:
+                continue
             self._run(["ip", "route", "flush", "table", str(table_id)])
         logger.info("cleanup_legacy_rules: done")
 
