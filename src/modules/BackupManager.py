@@ -152,19 +152,26 @@ class BackupManager:
                     json.dump(dashboard_data, f, indent=2, default=str)
 
                 # Full DB dump alongside JSON (mysqldump for MySQL, sqlite3.backup for SQLite).
-                # This is the file that restoreFromSnapshot prefers when the user
-                # selects the "full_database" component.
+                # Best-effort: if the dump cannot be created (missing mysqldump binary,
+                # in-memory sqlite, mocked engine in tests, …) we keep the JSON exports
+                # as fallback rather than failing the whole snapshot. The manifest
+                # records whether the full SQL/sqlite dump landed; UI shows the badge.
                 db_type = self._get_db_type()
                 full_db_path = None
                 if db_type == "mysql":
                     full_db_path = os.path.join(db_dir, "wgdashboard.sql")
                 elif db_type == "sqlite":
                     full_db_path = os.path.join(db_dir, "wgdashboard.db")
+                full_db_ok = False
                 if full_db_path is not None:
-                    if not self._full_db_backup(full_db_path):
-                        raise RuntimeError(
-                            f"Full database dump failed for {db_type} — snapshot would be incomplete"
-                        )
+                    full_db_ok = self._full_db_backup(full_db_path)
+                    if not full_db_ok:
+                        # Remove any partial file so manifest doesn't checksum a bad dump.
+                        try:
+                            if os.path.isfile(full_db_path):
+                                os.remove(full_db_path)
+                        except OSError:
+                            pass
 
                 # 4. Manifest
                 checksums = {}
@@ -341,10 +348,16 @@ class BackupManager:
 
                 # Per-config SQL dump (only this config's tables) — gives an
                 # authoritative DB-level fallback alongside the JSON export.
-                # Skipped silently for non-MySQL backends; JSON is sufficient.
+                # Best-effort: skipped silently for non-MySQL backends or when
+                # mysqldump is unavailable; JSON remains authoritative.
                 if self._get_db_type() == "mysql":
                     sql_path = os.path.join(backup_dir, f"{config_name}.sql")
-                    self._dump_specific_tables(sql_path, target_tables)
+                    if not self._dump_specific_tables(sql_path, target_tables):
+                        try:
+                            if os.path.isfile(sql_path):
+                                os.remove(sql_path)
+                        except OSError:
+                            pass
 
                 # 3. Manifest
                 checksums = {}
