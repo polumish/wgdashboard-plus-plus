@@ -235,7 +235,8 @@ class WireguardConfiguration:
         for t in existingTables:
             try:
                 with self.engine.begin() as conn:
-                    conn.execute(sqlalchemy.text(f'DROP TABLE IF EXISTS "{t}"'))
+                    qt = self.engine.dialect.identifier_preparer.quote(t)
+                    conn.execute(sqlalchemy.text(f'DROP TABLE IF EXISTS {qt}'))
             except Exception:
                 pass
         # Also remove the ConfigurationsInfo row so the config is fully forgotten
@@ -1185,27 +1186,31 @@ class WireguardConfiguration:
             if self.getStatus():
                 self.toggleConfiguration()
             self.createDatabase(newConfigurationName)
+            # Use the dialect's identifier_preparer to quote table names — backticks
+            # for MySQL/MariaDB, double-quotes for SQLite/Postgres. Hard-coding
+            # double-quotes (the previous behaviour) errored on MariaDB:
+            # `1064: You have an error in your SQL syntax ... near '"X" SELECT * FROM "Y"'`.
+            quote = self.engine.dialect.identifier_preparer.quote
             with self.engine.begin() as conn:
-                conn.execute(
-                    sqlalchemy.text(
-                        f'INSERT INTO "{newConfigurationName}" SELECT * FROM "{self.Name}"'
-                    )
-                )
-                conn.execute(
-                    sqlalchemy.text(
-                        f'INSERT INTO "{newConfigurationName}_restrict_access" SELECT * FROM "{self.Name}_restrict_access"'
-                    )
-                )
-                conn.execute(
-                    sqlalchemy.text(
-                        f'INSERT INTO "{newConfigurationName}_deleted" SELECT * FROM "{self.Name}_deleted"'
-                    )
-                )
-                conn.execute(
-                    sqlalchemy.text(
-                        f'INSERT INTO "{newConfigurationName}_transfer" SELECT * FROM "{self.Name}_transfer"'
-                    )
-                )
+                for suffix in ("", "_restrict_access", "_deleted", "_transfer"):
+                    src = quote(f"{self.Name}{suffix}")
+                    dst = quote(f"{newConfigurationName}{suffix}")
+                    conn.execute(sqlalchemy.text(f'INSERT INTO {dst} SELECT * FROM {src}'))
+                # Carry admin grants and peer-to-client assignments to the
+                # new configuration name. Without this, vstokar-style admin
+                # roles defined on the old name become orphans after rename.
+                for tbl in ("DashboardClientConfigAccess", "DashboardClientsPeerAssignment"):
+                    try:
+                        conn.execute(
+                            sqlalchemy.text(
+                                f'UPDATE {quote(tbl)} SET ConfigurationName=:new '
+                                f'WHERE ConfigurationName=:old'
+                            ),
+                            {"new": newConfigurationName, "old": self.Name},
+                        )
+                    except Exception:
+                        # Tables might not exist on minimal installs — non-fatal.
+                        pass
             self.AllPeerJobs.updateJobConfigurationName(self.Name, newConfigurationName)
             shutil.copy(
                 self.configPath,

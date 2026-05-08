@@ -552,13 +552,14 @@ class BackupManager:
                                         continue
                                     try:
                                         rows = dashboard_data[table]
-                                        conn.execute(text(f'DELETE FROM "{table}"'))
+                                        qt = self._quote_id(table)
+                                        conn.execute(text(f'DELETE FROM {qt}'))
                                         if rows:
                                             cols = list(rows[0].keys())
-                                            col_names = ", ".join(f'"{c}"' for c in cols)
+                                            col_names = self._quote_cols(cols)
                                             col_params = ", ".join(f":col_{c}" for c in cols)
                                             conn.execute(
-                                                text(f'INSERT INTO "{table}" ({col_names}) VALUES ({col_params})'),
+                                                text(f'INSERT INTO {qt} ({col_names}) VALUES ({col_params})'),
                                                 [{f"col_{k}": v for k, v in row.items()} for row in rows],
                                             )
                                     except Exception as e:  # noqa: BLE001
@@ -620,13 +621,14 @@ class BackupManager:
                         if not self._is_valid_table_name(table):
                             continue
                         try:
-                            conn.execute(text(f'DELETE FROM "{table}"'))
+                            qt = self._quote_id(table)
+                            conn.execute(text(f'DELETE FROM {qt}'))
                             if rows:
                                 cols = list(rows[0].keys())
-                                col_names = ", ".join(f'"{c}"' for c in cols)
+                                col_names = self._quote_cols(cols)
                                 col_params = ", ".join(f":col_{c}" for c in cols)
                                 conn.execute(
-                                    text(f'INSERT INTO "{table}" ({col_names}) VALUES ({col_params})'),
+                                    text(f'INSERT INTO {qt} ({col_names}) VALUES ({col_params})'),
                                     [{f"col_{k}": v for k, v in row.items()} for row in rows],
                                 )
                         except Exception as e:  # noqa: BLE001
@@ -740,6 +742,16 @@ class BackupManager:
     # -----------------------------------------------------------------------
     # Private helpers
     # -----------------------------------------------------------------------
+
+    def _quote_id(self, name: str) -> str:
+        """Dialect-aware identifier quoting (backticks for MySQL/MariaDB,
+        double-quotes for SQLite/Postgres). Hard-coded double-quotes errored
+        on MariaDB with `1064: SQL syntax ... near '"X"'`."""
+        return self.db_engine.dialect.identifier_preparer.quote(name)
+
+    def _quote_cols(self, cols: list[str]) -> str:
+        """Comma-separated quoted column list, dialect-aware."""
+        return ", ".join(self._quote_id(c) for c in cols)
 
     def _is_valid_table_name(self, name: str) -> bool:
         """Validate a table name from a backup file before using it in SQL."""
@@ -1004,7 +1016,8 @@ class BackupManager:
             with self.db_engine.connect() as conn:
                 for table_name in table_names:
                     try:
-                        rows = conn.execute(text(f'SELECT * FROM "{table_name}"'))
+                        qt = self._quote_id(table_name)
+                        rows = conn.execute(text(f'SELECT * FROM {qt}'))
                         keys = list(rows.keys())
                         result[table_name] = [dict(zip(keys, row)) for row in rows]
                     except Exception:  # noqa: BLE001

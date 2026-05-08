@@ -5,6 +5,13 @@ All notable changes to WgDashboard++ will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to a custom versioning scheme: **X.YZ** where X=major, Y=feature (+0.1), Z=bugfix (+0.01).
 
+## [v1.7.5] - 2026-05-09
+
+### Fixed
+- **Rename WireGuard configuration crashed on MariaDB/MySQL with SQL syntax error** — `WireguardConfiguration.renameConfiguration()` and several queries in `BackupManager` (DELETE/INSERT/SELECT in JSON-based restore paths and `_export_tables`) hard-coded ANSI double-quotes around dynamic table/column names. SQLite and PostgreSQL accept double-quotes as identifier delimiters, MariaDB rejects them as string literals (`1064: SQL syntax error ... near '"Vano_Golubka" SELECT * FROM "Vano"'`). On Halfnet prod the rename half-completed: target tables were created empty, the source interface was brought DOWN, and the operation aborted — leaving the network unreachable until manual recovery.
+  All affected SQL strings now route table and column names through `engine.dialect.identifier_preparer.quote()`, which emits backticks for MySQL/MariaDB and double-quotes for SQLite/PostgreSQL.
+- **Rename also carries admin grants and peer-to-client assignments** — `renameConfiguration()` previously only updated `PeerJobs.ConfigurationName`. Rows in `DashboardClientConfigAccess` (per-config admin grants) and `DashboardClientsPeerAssignment` (peer-to-client links) referencing the old name became orphans. Both tables are now updated transactionally as part of the rename.
+
 ## [v1.7.4] - 2026-05-08
 
 ### Fixed
