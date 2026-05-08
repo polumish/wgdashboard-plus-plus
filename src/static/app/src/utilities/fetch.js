@@ -1,3 +1,14 @@
+// Centralized API wrappers for the whole dashboard.
+//
+// Error policy:
+//   - 401            → toast + redirect to /signin (real auth failure)
+//   - any other 4xx/5xx → toast with the server's error message; user stays on page
+//   - network/fetch reject → toast "Request failed: ..."
+//
+// A 5xx must NOT log the user out — masking a backend bug as an expired
+// session was a real incident, so handleResponse below treats only 401
+// as auth and routes everything else through the message store.
+
 import {DashboardConfigurationStore} from "@/stores/DashboardConfigurationStore.js";
 import router from "@/router/router.js";
 const getHeaders = () => {

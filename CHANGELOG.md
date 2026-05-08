@@ -5,6 +5,24 @@ All notable changes to WgDashboard++ will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to a custom versioning scheme: **X.YZ** where X=major, Y=feature (+0.1), Z=bugfix (+0.01).
 
+## [v1.7.2] - 2026-05-08
+
+### Fixed
+- **Multi-network admin click logged you out** — clicking a client who had admin/manager access in two or more configurations triggered a 500 on `/api/clients/getConfigAccess` (`AttributeError: 'NoneType' object has no attribute 'strftime'` in `DashboardClientConfigAccess.toJson`). The frontend interpreted the 500 as an unauth response and redirected to `/signin`, manifesting as "the dashboard logs me out when I open this user". Root cause: `GrantAccess()` did not pass `GrantedDate` on INSERT and the live MySQL schema did not carry the `server_default=NOW()` that SQLAlchemy declared, so the column landed NULL on grants. Fixed at three layers:
+  - `ConfigAccess.toJson()` now returns `null` when `GrantedDate` is NULL, matching the existing `RevokedDate` behaviour.
+  - `GrantAccess()` writes `GrantedDate = datetime.now()` explicitly at INSERT instead of relying on the column default.
+  - One-shot DB heal script applied on prod/staging to set `GrantedDate = NOW(6)` on existing NULL rows.
+- **Backend errors no longer log you out of the UI** — the centralized API wrapper (`utilities/fetch.js`) used to redirect to `/signin` on every error path, so a 500 (or a network blip) looked exactly like an expired session. Now only HTTP 401 redirects; everything else (4xx/5xx, network failure) raises a toast with the server's error message and keeps the user on the page. This applies to every `fetchGet`/`fetchPost` call in the dashboard — backups, peers, configurations, settings, diagnostics — so no UI flow can swallow a backend exception by silently signing the operator out.
+- **Error toasts auto-dismissed too fast to read** — `danger`-type messages now centre on the screen and stay for 30 seconds (other toasts keep the original 5 s in the corner). Hovering still pauses the timer, click-to-dismiss still works.
+
+### Added
+- **Backups now include the full database** — `BackupManager.createGlobalSnapshot` writes `db/wgdashboard.sql` via `mysqldump --single-transaction --routines --triggers` (or `db/wgdashboard.db` via `sqlite3.backup` for SQLite installs) alongside the existing JSON exports. Per-config backups likewise dump the relevant tables to `<config>.sql`. Daily/weekly/monthly scheduled backups, manual snapshots, and pre-change auto-backups all benefit. Falls back to JSON-only if `mysqldump` is unavailable — UI badge `Full database included` reports the truth based on what landed on disk.
+- **Restore decouples database from configurations** — `restoreFromSnapshot` accepts `full_database` as an independent component instead of bundling it inside `configurations`. The Settings → Backups → Restore modal exposes three top-level checkboxes (`WireGuard Configurations` / `Full Database` / `Dashboard Settings`) plus the existing partial-DB restores (webhooks, peer jobs, share links, client portal, API keys). When `Full Database` is selected, partial DB restores grey out — the SQL dump already covers them. A red alert spells out that a full DB restore replaces every row.
+
+### Improved
+- **Restore progress messages are honest** — `/api/backup/global/restore` now distinguishes "Replacing entire database from SQL dump", "Replacing dashboard data tables", and "Skipping database (not selected)" instead of always saying "Replacing database…".
+- **`createGlobalSnapshot` is best-effort about the SQL dump** — if `mysqldump` is missing or the engine cannot produce a dump (e.g. mocked engine in CI), the snapshot still succeeds with JSON-only contents and the partial `.sql` file is removed so manifests don't checksum a half-written file.
+
 ## [v1.7.1] - 2026-04-10
 
 ### Fixed
