@@ -22,7 +22,7 @@ class ConfigAccess:
             "ClientID": self.ClientID,
             "ConfigurationName": self.ConfigurationName,
             "Role": self.Role,
-            "GrantedDate": self.GrantedDate.strftime("%Y-%m-%d %H:%M:%S"),
+            "GrantedDate": self.GrantedDate.strftime("%Y-%m-%d %H:%M:%S") if self.GrantedDate else None,
             "RevokedDate": self.RevokedDate.strftime("%Y-%m-%d %H:%M:%S") if self.RevokedDate else None
         }
 
@@ -71,6 +71,7 @@ class DashboardClientConfigAccess:
             "ClientID": ClientID,
             "ConfigurationName": ConfigurationName,
             "Role": Role,
+            "GrantedDate": datetime.datetime.now(),
         }
         with self.engine.begin() as conn:
             conn.execute(self.table.insert().values(data))
