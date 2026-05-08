@@ -118,7 +118,12 @@ class BackupManager:
                         os.path.join(settings_dir, "wg-dashboard.ini"),
                     )
 
-                # 3. DB export — lightweight JSON only (no transfer history)
+                # 3. DB export
+                #    - JSON dumps (peers.json + dashboard.json) for inspection/preview
+                #      and as a portable fallback when full SQL dump is unavailable.
+                #    - Full SQL dump (wgdashboard.sql / wgdashboard.db) for authoritative
+                #      restore — guarantees the snapshot contains the *entire* database
+                #      regardless of what the JSON exporter knows about.
                 db_dir = os.path.join(snap_dir, "db")
                 os.makedirs(db_dir, exist_ok=True)
 
@@ -145,6 +150,21 @@ class BackupManager:
                     json.dump(peers_data, f, indent=2, default=str)
                 with open(dashboard_path, "w") as f:
                     json.dump(dashboard_data, f, indent=2, default=str)
+
+                # Full DB dump alongside JSON (mysqldump for MySQL, sqlite3.backup for SQLite).
+                # This is the file that restoreFromSnapshot prefers when the user
+                # selects the "full_database" component.
+                db_type = self._get_db_type()
+                full_db_path = None
+                if db_type == "mysql":
+                    full_db_path = os.path.join(db_dir, "wgdashboard.sql")
+                elif db_type == "sqlite":
+                    full_db_path = os.path.join(db_dir, "wgdashboard.db")
+                if full_db_path is not None:
+                    if not self._full_db_backup(full_db_path):
+                        raise RuntimeError(
+                            f"Full database dump failed for {db_type} — snapshot would be incomplete"
+                        )
 
                 # 4. Manifest
                 checksums = {}
@@ -319,6 +339,13 @@ class BackupManager:
                 with open(peers_path, "w") as f:
                     json.dump(config_tables, f, indent=2, default=str)
 
+                # Per-config SQL dump (only this config's tables) — gives an
+                # authoritative DB-level fallback alongside the JSON export.
+                # Skipped silently for non-MySQL backends; JSON is sufficient.
+                if self._get_db_type() == "mysql":
+                    sql_path = os.path.join(backup_dir, f"{config_name}.sql")
+                    self._dump_specific_tables(sql_path, target_tables)
+
                 # 3. Manifest
                 checksums = {}
                 components = []
@@ -392,8 +419,12 @@ class BackupManager:
         ----------
         name:       snapshot directory name (e.g. "snapshot_20240101_120000_000000")
         components: list of component names to restore, any of:
-                    "configurations", "dashboard_settings", "webhooks",
-                    "peer_jobs", "share_links", "client_portal", "api_keys"
+                    "configurations"      — wg/awg .conf files only
+                    "full_database"       — replace entire DB from SQL/sqlite dump
+                    "dashboard_settings"  — wg-dashboard.ini
+                    "webhooks", "peer_jobs", "share_links",
+                    "client_portal", "api_keys"  — JSON-based partial restores
+                                                   (ignored when full_database is selected)
 
         Returns
         -------
@@ -464,79 +495,62 @@ class BackupManager:
                         shutil.copy2(src, dest)
                 restored.append("configurations")
 
-            # 3. Dashboard DB components
-            dashboard_json = os.path.join(snap_dir, "db", "dashboard.json")
-            if os.path.isfile(dashboard_json):
-                with open(dashboard_json) as f:
-                    dashboard_data = json.load(f)
+            warnings = []
 
-                warnings = []
-                db_components = [c for c in components if c in _COMPONENT_TABLE_MAP]
-                if db_components:
-                    with self.db_engine.begin() as conn:
-                        for comp in db_components:
-                            for table in _COMPONENT_TABLE_MAP[comp]:
-                                if table not in dashboard_data:
-                                    continue
-                                if not self._is_valid_table_name(table):
-                                    continue
-                                try:
-                                    rows = dashboard_data[table]
-                                    conn.execute(text(f'DELETE FROM "{table}"'))
-                                    if rows:
-                                        cols = list(rows[0].keys())
-                                        col_names = ", ".join(f'"{c}"' for c in cols)
-                                        col_params = ", ".join(f":col_{c}" for c in cols)
-                                        conn.execute(
-                                            text(f'INSERT INTO "{table}" ({col_names}) VALUES ({col_params})'),
-                                            [{f"col_{k}": v for k, v in row.items()} for row in rows],
-                                        )
-                                except Exception as e:  # noqa: BLE001
-                                    warnings.append(f"Failed to restore table {table}: {str(e)}")
-                            restored.append(comp)
-
-            # 4. Database restore (alongside configurations)
-            if "configurations" in components:
-                # Check for legacy full dump files first
+            # 3. Full database restore — independent component.
+            #    When selected, this REPLACES the entire DB from the SQL/sqlite
+            #    dump in the snapshot. JSON-based partial component restores
+            #    below are skipped (full DB already covers them).
+            full_db_done = False
+            if "full_database" in components:
                 db_sql = os.path.join(snap_dir, "db", "wgdashboard.sql")
                 db_sqlite = os.path.join(snap_dir, "db", "wgdashboard.db")
-                if os.path.isfile(db_sql):
-                    self._full_db_restore(db_sql)
-                    restored.append("full_database")
-                elif os.path.isfile(db_sqlite):
-                    self._full_db_restore(db_sqlite)
-                    restored.append("full_database")
+                src = db_sql if os.path.isfile(db_sql) else (
+                    db_sqlite if os.path.isfile(db_sqlite) else None
+                )
+                if src is None:
+                    warnings.append(
+                        "full_database requested but no SQL/sqlite dump found in snapshot — "
+                        "this snapshot was created before DB-in-backup support"
+                    )
                 else:
-                    # Fallback: JSON-based restore (older snapshots without .db file)
-                    # Must drop ALL peer tables first, then insert only what's in backup
-                    peers_json = os.path.join(snap_dir, "db", "peers.json")
-                    if os.path.isfile(peers_json):
-                        with open(peers_json) as f:
-                            peers_data = json.load(f)
+                    if self._full_db_restore(src):
+                        restored.append("full_database")
+                        full_db_done = True
+                    else:
+                        warnings.append("full_database restore failed (see logs)")
+
+            # 4. JSON-based partial DB component restores.
+            #    Skipped if full_database already replaced the entire DB.
+            if not full_db_done:
+                dashboard_json = os.path.join(snap_dir, "db", "dashboard.json")
+                if os.path.isfile(dashboard_json):
+                    with open(dashboard_json) as f:
+                        dashboard_data = json.load(f)
+
+                    db_components = [c for c in components if c in _COMPONENT_TABLE_MAP]
+                    if db_components:
                         with self.db_engine.begin() as conn:
-                            # Drop all existing per-config tables
-                            try:
-                                inspector = inspect(self.db_engine)
-                                for tbl in inspector.get_table_names():
-                                    if tbl not in DASHBOARD_TABLES and self._is_valid_table_name(tbl):
-                                        conn.execute(text(f'DELETE FROM "{tbl}"'))
-                            except Exception:
-                                pass
-                            # Insert backup data
-                            for table, rows in peers_data.items():
-                                if not self._is_valid_table_name(table):
-                                    continue
-                                try:
-                                    if rows:
-                                        cols = list(rows[0].keys())
-                                        col_names = ", ".join(f'"{c}"' for c in cols)
-                                        col_params = ", ".join(f":col_{c}" for c in cols)
-                                        conn.execute(
-                                            text(f'INSERT INTO "{table}" ({col_names}) VALUES ({col_params})'),
-                                            [{f"col_{k}": v for k, v in row.items()} for row in rows],
-                                        )
-                                except Exception as e:  # noqa: BLE001
-                                    warnings.append(f"Failed to restore table {table}: {str(e)}")
+                            for comp in db_components:
+                                for table in _COMPONENT_TABLE_MAP[comp]:
+                                    if table not in dashboard_data:
+                                        continue
+                                    if not self._is_valid_table_name(table):
+                                        continue
+                                    try:
+                                        rows = dashboard_data[table]
+                                        conn.execute(text(f'DELETE FROM "{table}"'))
+                                        if rows:
+                                            cols = list(rows[0].keys())
+                                            col_names = ", ".join(f'"{c}"' for c in cols)
+                                            col_params = ", ".join(f":col_{c}" for c in cols)
+                                            conn.execute(
+                                                text(f'INSERT INTO "{table}" ({col_names}) VALUES ({col_params})'),
+                                                [{f"col_{k}": v for k, v in row.items()} for row in rows],
+                                            )
+                                    except Exception as e:  # noqa: BLE001
+                                        warnings.append(f"Failed to restore table {table}: {str(e)}")
+                                restored.append(comp)
 
         return {"status": True, "restored": restored, "warnings": warnings}
 
@@ -804,6 +818,49 @@ class BackupManager:
             return result.returncode == 0
 
         return False
+
+    def _dump_specific_tables(self, dest_path: str, tables: list) -> bool:
+        """Dump a specific set of MySQL tables to a SQL file.
+
+        Skips silently if not MySQL or if no tables exist. Used by per-config
+        backups to capture only the tables that belong to one configuration.
+        """
+        import subprocess
+        if self._get_db_type() != "mysql":
+            return False
+
+        creds = self._get_mysql_credentials()
+        try:
+            with self.db_engine.connect() as conn:
+                result = conn.execute(text(
+                    "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES "
+                    f"WHERE TABLE_SCHEMA = '{creds['database']}'"
+                ))
+                existing = {row[0] for row in result}
+        except Exception:
+            return False
+
+        tables_to_dump = [t for t in tables if t in existing]
+        if not tables_to_dump:
+            return False
+
+        cmd = [
+            "mysqldump",
+            f"--host={creds['host']}",
+            f"--port={creds['port']}",
+            f"--user={creds['user']}",
+            f"--password={creds['password']}",
+            "--single-transaction",
+            "--no-tablespaces",
+            creds["database"],
+        ] + tables_to_dump
+
+        try:
+            with open(dest_path, "w") as f:
+                result = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE, timeout=120)
+            return result.returncode == 0
+        except Exception:
+            return False
 
     def _get_db_type(self) -> str:
         """Return 'mysql', 'postgresql', or 'sqlite' based on engine URL."""

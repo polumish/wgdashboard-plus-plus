@@ -938,10 +938,18 @@ def API_backup_global_restore():
             _restore_status["step"] = "Creating restore point..."
             _restore_status["progress"] = 1
 
-            _restore_status["step"] = "Replacing database..."
+            if "full_database" in components:
+                _restore_status["step"] = "Replacing entire database from SQL dump..."
+            elif any(c in components for c in ("webhooks", "peer_jobs", "share_links", "client_portal", "api_keys")):
+                _restore_status["step"] = "Replacing dashboard data tables..."
+            else:
+                _restore_status["step"] = "Skipping database (not selected)..."
             _restore_status["progress"] = 2
 
-            _restore_status["step"] = "Replacing configuration files..."
+            if "configurations" in components:
+                _restore_status["step"] = "Replacing configuration files..."
+            else:
+                _restore_status["step"] = "Skipping configuration files (not selected)..."
             _restore_status["progress"] = 3
 
             result = AllBackupManager.restoreFromSnapshot(name, components)

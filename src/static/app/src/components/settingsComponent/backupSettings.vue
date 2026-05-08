@@ -43,6 +43,7 @@ const restoreTarget = ref(null);
 const showRestorePoints = ref(false);
 const restoreComponents = ref({
     configurations: true,
+    full_database: true,
     dashboard_settings: true,
     webhooks: true,
     peer_jobs: true,
@@ -50,6 +51,18 @@ const restoreComponents = ref({
     client_portal: true,
     api_keys: true,
 });
+
+// When full_database is on, the JSON-based partial restores are redundant
+// (the SQL dump replaces everything). Disable them visually + logically.
+const partialDbKeys = ['webhooks', 'peer_jobs', 'share_links', 'client_portal', 'api_keys'];
+watch(
+    () => restoreComponents.value.full_database,
+    (on) => {
+        if (on) {
+            for (const k of partialDbKeys) restoreComponents.value[k] = false;
+        }
+    }
+);
 
 // Storage info (from settings if available)
 const storageUsed = ref(0);
@@ -98,13 +111,24 @@ const lastBackup = computed(() => {
     return backups.value.reduce((a, b) => (dayjs(a.date).isAfter(dayjs(b.date)) ? a : b));
 });
 
-const restoreSelectedCount = computed(() => {
-    return Object.values(restoreComponents.value).filter(Boolean).length;
+// Count only the components that are actually applicable in the current selection.
+// When full_database is on, the JSON-based partial restores are disabled, so they
+// don't count against the selection total.
+const effectiveRestoreKeys = computed(() => {
+    const keys = ['configurations', 'full_database', 'dashboard_settings'];
+    if (!restoreComponents.value.full_database) {
+        keys.push(...partialDbKeys);
+    }
+    return keys;
 });
 
-const allRestoreSelected = computed(() => {
-    return Object.values(restoreComponents.value).every(Boolean);
-});
+const restoreSelectedCount = computed(() =>
+    effectiveRestoreKeys.value.filter(k => restoreComponents.value[k]).length
+);
+
+const allRestoreSelected = computed(() =>
+    effectiveRestoreKeys.value.every(k => restoreComponents.value[k])
+);
 
 // Calendar helpers
 const calendarDays = computed(() => {
@@ -206,8 +230,18 @@ function downloadBackup(name) {
 
 function openRestoreModal(backup) {
     restoreTarget.value = backup;
-    // reset to all selected
-    Object.keys(restoreComponents.value).forEach(k => (restoreComponents.value[k] = true));
+    // Default: configurations + full_database + dashboard_settings.
+    // Partial DB restores stay off because full_database covers them.
+    restoreComponents.value = {
+        configurations: true,
+        full_database: true,
+        dashboard_settings: true,
+        webhooks: false,
+        peer_jobs: false,
+        share_links: false,
+        client_portal: false,
+        api_keys: false,
+    };
     restoreModal.value = true;
 }
 
@@ -218,7 +252,9 @@ function closeRestoreModal() {
 
 function toggleAllRestore() {
     const newVal = !allRestoreSelected.value;
-    Object.keys(restoreComponents.value).forEach(k => (restoreComponents.value[k] = newVal));
+    for (const k of effectiveRestoreKeys.value) {
+        restoreComponents.value[k] = newVal;
+    }
 }
 
 const restoring = ref(false);
@@ -914,6 +950,15 @@ onMounted(() => {
                                     <label class="form-check-label" for="rc_wg">
                                         <i class="bi bi-diagram-3 me-1 text-body-secondary"></i>
                                         <LocaleText t="WireGuard Configurations"></LocaleText>
+                                        <small class="text-body-secondary ms-1">(.conf files)</small>
+                                    </label>
+                                </div>
+                                <div class="form-check mb-0">
+                                    <input class="form-check-input" type="checkbox" id="rc_fulldb" v-model="restoreComponents.full_database">
+                                    <label class="form-check-label" for="rc_fulldb">
+                                        <i class="bi bi-database-fill me-1 text-success"></i>
+                                        <LocaleText t="Full Database"></LocaleText>
+                                        <small class="text-body-secondary ms-1">(replaces entire DB from SQL dump)</small>
                                     </label>
                                 </div>
                                 <div class="form-check mb-0">
@@ -921,38 +966,47 @@ onMounted(() => {
                                     <label class="form-check-label" for="rc_dash">
                                         <i class="bi bi-gear me-1 text-body-secondary"></i>
                                         <LocaleText t="Dashboard Settings"></LocaleText>
+                                        <small class="text-body-secondary ms-1">(wg-dashboard.ini)</small>
                                     </label>
                                 </div>
-                                <div class="form-check mb-0">
-                                    <input class="form-check-input" type="checkbox" id="rc_hooks" v-model="restoreComponents.webhooks">
+                                <hr class="my-1">
+                                <small class="text-body-secondary mb-1" v-if="restoreComponents.full_database">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    Items below are replaced as part of "Full Database".
+                                </small>
+                                <small class="text-body-secondary mb-1" v-else>
+                                    Partial restores (used when "Full Database" is off):
+                                </small>
+                                <div class="form-check mb-0" :class="{ 'opacity-50': restoreComponents.full_database }">
+                                    <input class="form-check-input" type="checkbox" id="rc_hooks" v-model="restoreComponents.webhooks" :disabled="restoreComponents.full_database">
                                     <label class="form-check-label" for="rc_hooks">
                                         <i class="bi bi-broadcast me-1 text-body-secondary"></i>
                                         <LocaleText t="Webhooks"></LocaleText>
                                     </label>
                                 </div>
-                                <div class="form-check mb-0">
-                                    <input class="form-check-input" type="checkbox" id="rc_jobs" v-model="restoreComponents.peer_jobs">
+                                <div class="form-check mb-0" :class="{ 'opacity-50': restoreComponents.full_database }">
+                                    <input class="form-check-input" type="checkbox" id="rc_jobs" v-model="restoreComponents.peer_jobs" :disabled="restoreComponents.full_database">
                                     <label class="form-check-label" for="rc_jobs">
                                         <i class="bi bi-clock me-1 text-body-secondary"></i>
                                         <LocaleText t="Peer Jobs"></LocaleText>
                                     </label>
                                 </div>
-                                <div class="form-check mb-0">
-                                    <input class="form-check-input" type="checkbox" id="rc_share" v-model="restoreComponents.share_links">
+                                <div class="form-check mb-0" :class="{ 'opacity-50': restoreComponents.full_database }">
+                                    <input class="form-check-input" type="checkbox" id="rc_share" v-model="restoreComponents.share_links" :disabled="restoreComponents.full_database">
                                     <label class="form-check-label" for="rc_share">
                                         <i class="bi bi-share me-1 text-body-secondary"></i>
                                         <LocaleText t="Share Links"></LocaleText>
                                     </label>
                                 </div>
-                                <div class="form-check mb-0">
-                                    <input class="form-check-input" type="checkbox" id="rc_portal" v-model="restoreComponents.client_portal">
+                                <div class="form-check mb-0" :class="{ 'opacity-50': restoreComponents.full_database }">
+                                    <input class="form-check-input" type="checkbox" id="rc_portal" v-model="restoreComponents.client_portal" :disabled="restoreComponents.full_database">
                                     <label class="form-check-label" for="rc_portal">
                                         <i class="bi bi-person-badge me-1 text-body-secondary"></i>
                                         <LocaleText t="Client Portal"></LocaleText>
                                     </label>
                                 </div>
-                                <div class="form-check mb-0">
-                                    <input class="form-check-input" type="checkbox" id="rc_apikeys" v-model="restoreComponents.api_keys">
+                                <div class="form-check mb-0" :class="{ 'opacity-50': restoreComponents.full_database }">
+                                    <input class="form-check-input" type="checkbox" id="rc_apikeys" v-model="restoreComponents.api_keys" :disabled="restoreComponents.full_database">
                                     <label class="form-check-label" for="rc_apikeys">
                                         <i class="bi bi-key me-1 text-body-secondary"></i>
                                         <LocaleText t="API Keys"></LocaleText>
@@ -963,6 +1017,12 @@ onMounted(() => {
                             <div class="alert alert-warning rounded-3 mt-3 mb-0 d-flex gap-2 align-items-start" :style="{ fontSize: 'var(--density-font-sm, 0.8rem)' }">
                                 <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1"></i>
                                 <span><LocaleText t="Restoring WireGuard Configurations may disconnect active peers. Proceed with caution."></LocaleText></span>
+                            </div>
+                            <div v-if="restoreComponents.full_database" class="alert alert-danger rounded-3 mt-2 mb-0 d-flex gap-2 align-items-start" :style="{ fontSize: 'var(--density-font-sm, 0.8rem)' }">
+                                <i class="bi bi-database-fill-x flex-shrink-0 mt-1"></i>
+                                <span>
+                                    <strong>Full Database restore replaces ALL data</strong> — peers, clients, webhooks, jobs, share-links, API keys, transfer history. Any rows added since this backup will be lost.
+                                </span>
                             </div>
                         </div>
                         <div class="modal-footer border-top">
