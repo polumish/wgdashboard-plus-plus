@@ -4,6 +4,14 @@ import dayjs from "dayjs";
 
 export default {
 	name: "message",
+	computed: {
+		isError(){
+			return this.message.type === 'danger'
+		},
+		autoHideMs(){
+			return this.isError ? 30000 : 5000
+		}
+	},
 	methods: {
 		dayjs,
 		hide(){
@@ -13,7 +21,7 @@ export default {
 		show(){
 			this.timeout = setTimeout(() => {
 				this.message.show = false
-			}, 5000)
+			}, this.autoHideMs)
 		},
 		ct(){
 			clearTimeout(this.timeout)
@@ -39,11 +47,12 @@ export default {
 	<div
 		@mouseenter="dismiss = true; this.ct()"
 		@mouseleave="dismiss = false; this.show()"
-		class="card shadow rounded-3 position-relative message ms-auto"
+		class="card shadow rounded-3 message"
+		:class="isError ? 'message-error' : 'position-relative ms-auto'"
 	     :id="this.message.id">
 		<div
 			:class="{
-			'text-bg-danger': this.message.type === 'danger', 
+			'text-bg-danger': this.message.type === 'danger',
 			'text-bg-success': this.message.type === 'success',
 			'text-bg-warning': this.message.type === 'warning'}"
 			class="card-header pos">
@@ -58,7 +67,7 @@ export default {
 					</small>
 				</div>
 				<div v-else>
-					<small 
+					<small
 						@click="hide()"
 						class="d-block mx-auto w-100 text-center" style="cursor: pointer">
 						<i class="bi bi-x-lg me-2"></i><LocaleText t="Dismiss"></LocaleText>
@@ -70,7 +79,7 @@ export default {
 			<div>
 				{{this.message.content}}
 			</div>
-			
+
 		</div>
 	</div>
 </template>
@@ -79,12 +88,26 @@ export default {
 	.message{
 		width: 100%;
 	}
-	
+
 	@media screen and (min-width: 576px) {
 		.message{
 			width: 400px;
 		}
 	}
-	
-	
+
+	.message-error{
+		position: fixed !important;
+		top: 50% !important;
+		left: 50% !important;
+		right: auto !important;
+		transform: translate(-50%, -50%);
+		width: min(560px, 90vw);
+		z-index: 10010;
+	}
+
+	@media screen and (min-width: 576px) {
+		.message-error{
+			width: min(560px, 90vw);
+		}
+	}
 </style>

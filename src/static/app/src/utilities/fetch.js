@@ -27,53 +27,75 @@ export const getUrl = (url) => {
 	if (apiKey){
 		return `${apiKey.host}${url}`
 	}
-	return import.meta.env.MODE === 'development' ? url 
+	return import.meta.env.MODE === 'development' ? url
 		: `${window.location.protocol}//${(window.location.host + window.location.pathname + url).replace(/\/\//g, '/')}`
 }
 
+const extractErrorMessage = async (response) => {
+	try {
+		const body = await response.clone().json()
+		if (body && (body.message || body.error)) {
+			return body.message || body.error
+		}
+	} catch (e) { /* not JSON, fall through */ }
+	try {
+		const text = await response.clone().text()
+		if (text) return text.length > 300 ? text.slice(0, 300) + '…' : text
+	} catch (e) { /* ignore */ }
+	return response.statusText || `HTTP ${response.status}`
+}
+
+const handleResponse = async (response, callback) => {
+	const store = DashboardConfigurationStore()
+	if (response.ok) {
+		const data = await response.json()
+		if (callback) callback(data)
+		return
+	}
+	if (response.status === 401) {
+		store.newMessage("WGDashboard", "Sign in session ended, please sign in again", "warning")
+		router.push({path: '/signin'})
+		return
+	}
+	const detail = await extractErrorMessage(response)
+	store.newMessage(
+		"Server",
+		`Error ${response.status}: ${detail}`,
+		"danger"
+	)
+}
+
+const handleNetworkError = (err) => {
+	console.error("Network/fetch error:", err)
+	const store = DashboardConfigurationStore()
+	store.newMessage(
+		"Network",
+		`Request failed: ${err && err.message ? err.message : err}`,
+		"danger"
+	)
+}
+
 export const fetchGet = async (url, params=undefined, callback=undefined) => {
-	const urlSearchParams = new URLSearchParams(params);
-	await fetch(`${getUrl(url)}?${urlSearchParams.toString()}`, {
-		headers: getHeaders()
-	})
-		.then((x) => {
-			const store = DashboardConfigurationStore();
-			if (!x.ok){
-				if (x.status !== 200){
-					if (x.status === 401){
-						store.newMessage("WGDashboard", "Sign in session ended, please sign in again", "warning")
-					}
-					throw new Error(x.statusText)
-				}
-			}else{
-				return x.json()
-			}
+	const urlSearchParams = new URLSearchParams(params)
+	try {
+		const response = await fetch(`${getUrl(url)}?${urlSearchParams.toString()}`, {
+			headers: getHeaders()
 		})
-		.then(x => callback ? callback(x) : undefined).catch(x => {
-			console.log("Error:", x)
-			router.push({path: '/signin'})
-	})
+		await handleResponse(response, callback)
+	} catch (err) {
+		handleNetworkError(err)
+	}
 }
 
 export const fetchPost = async (url, body, callback) => {
-	await fetch(`${getUrl(url)}`, {
-		headers: getHeaders(),
-		method: "POST",
-		body: JSON.stringify(body)
-	}).then((x) => {
-		const store = DashboardConfigurationStore();
-		if (!x.ok){
-			if (x.status !== 200){
-				if (x.status === 401){
-					store.newMessage("WGDashboard", "Sign in session ended, please sign in again", "warning")
-				}
-				throw new Error(x.statusText)
-			}
-		}else{
-			return x.json()
-		}
-	}).then(x => callback ? callback(x) : undefined).catch(x => {
-		console.log("Error:", x)
-		router.push({path: '/signin'})
-	})
+	try {
+		const response = await fetch(`${getUrl(url)}`, {
+			headers: getHeaders(),
+			method: "POST",
+			body: JSON.stringify(body)
+		})
+		await handleResponse(response, callback)
+	} catch (err) {
+		handleNetworkError(err)
+	}
 }
