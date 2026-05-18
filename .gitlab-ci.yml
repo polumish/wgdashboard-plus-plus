@@ -53,7 +53,7 @@ deploy:
       echo "Health check failed after 3 attempts!"
       exit 1
   rules:
-    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
   environment:
     name: production
     url: https://dashboard.net.half.net.ua
@@ -70,7 +70,7 @@ mirror-github:
     - git remote add github "https://x-access-token:${GH_MIRROR_TOKEN}@github.com/polumish/wgdashboard-plus-plus.git"
     - git push github main --force
   rules:
-    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"
   allow_failure: true
 
 upstream-watch:
