@@ -127,6 +127,60 @@ class TestClientPortalConfigurations:
         assert data["status"] is False
 
 
+class TestManagedAddPeerAllowedIPs:
+    """End-to-end regression: a peer added through the client portal on a mesh
+    config must get the config subnet as AllowedIPs, never 0.0.0.0/0."""
+
+    FAKE_KEY = "cFak3Pr1vat3K3y0000000000000000000000000000="
+
+    def test_managed_add_peer_mesh_uses_config_subnet_not_full_tunnel(self, client):
+        import dashboard
+
+        # 1. Admin creates a mesh configuration (no NetworkMode -> mesh default).
+        auth = client.post("/api/authenticate",
+                           json={"username": "admin", "password": "admin", "totp": ""})
+        assert auth.get_json()["status"] is True
+        cfg_name = "regmesh"
+        resp = client.post("/api/addWireguardConfiguration", json={
+            "ConfigurationName": cfg_name,
+            "Address": "10.123.0.1/24",
+            "ListenPort": "51999",
+            "PrivateKey": self.FAKE_KEY,
+            "Protocol": "wg",
+        })
+        assert resp.get_json()["status"] is True, resp.get_json()
+
+        # 2. Create a client user and grant it manager access to that config.
+        dc = dashboard.DashboardClients
+        dc.SignUp(Email="manager_add@example.com",
+                  Password="StrongP@ss1", ConfirmPassword="StrongP@ss1")
+        cid = next(c["ClientID"] for c in dc.GetAllClientsRaw()
+                   if c["Email"] == "manager_add@example.com")
+        granted, _ = dc.GrantConfigAccess(cid, cfg_name, "manager")
+        assert granted is True
+
+        # 3. Authenticate as that client (TOTP simulated, as other portal tests do).
+        client.get("/api/signout")
+        client.post("/client/api/signin",
+                    json={"Email": "manager_add@example.com", "Password": "StrongP@ss1"})
+        with client.session_transaction() as sess:
+            sess["TotpVerified"] = True
+            sess["Role"] = "client"
+            sess["ClientID"] = cid
+
+        # 4. Manager adds a peer sending only a name (the real portal payload).
+        add = client.post(f"/client/api/managedConfigurations/{cfg_name}/addPeers",
+                          json={"name": "regtest-peer"})
+        assert add.get_json()["status"] is True, add.get_json()
+
+        # 5. The stored endpoint_allowed_ip must be the config subnet, not 0.0.0.0/0.
+        wc = dashboard.WireguardConfigurations[cfg_name]
+        wc.getPeers()
+        peer = next(p for p in wc.Peers if p.name == "regtest-peer")
+        assert peer.endpoint_allowed_ip == "10.123.0.0/24"
+        assert peer.endpoint_allowed_ip != "0.0.0.0/0"
+
+
 class TestClientPortalSettings:
     def _authenticated_client(self, client, email="settings@example.com"):
         client.post("/client/api/signup", json={
