@@ -441,16 +441,19 @@ class TestBackupManagerRotation:
         remaining = mgr.getGlobalSnapshots(filter_type="scheduled_daily")
         assert len(remaining) == 3
 
-    def test_enforce_rotation_by_size(self, backup_env):
+    def test_enforce_rotation_by_size_keeps_only_newest(self, backup_env):
         mgr = _make_manager(backup_env)
+        created = []
         with patch("modules.BackupManager.inspect", return_value=backup_env["inspector"]):
             for _ in range(4):
-                mgr.createGlobalSnapshot(trigger="scheduled_daily")
+                created.append(mgr.createGlobalSnapshot(trigger="scheduled_daily")["name"])
                 time.sleep(0.01)
 
         assert len(mgr.getGlobalSnapshots()) == 4
+        newest_name = created[-1]
 
-        # Enforce a very small storage limit (0 MB) — all scheduled snapshots should go
+        # Enforce a tiny storage limit (0 MB): every deletable snapshot is
+        # removed, but the most-recent backup is always preserved.
         mgr.enforceRotation(
             daily_keep=1000,
             weekly_keep=1000,
@@ -458,9 +461,8 @@ class TestBackupManagerRotation:
             max_storage_mb=0,
         )
 
-        # All non-manual snapshots should be deleted
-        remaining = mgr.getGlobalSnapshots()
-        assert all(s["trigger"] == "manual" for s in remaining)
+        remaining = [s["name"] for s in mgr.getGlobalSnapshots()]
+        assert remaining == [newest_name]
 
     def test_enforce_rotation_preserves_manual(self, backup_env):
         mgr = _make_manager(backup_env)
@@ -498,3 +500,50 @@ class TestBackupManagerRotation:
 
         remaining = mgr.getConfigBackups("wg0")
         assert len(remaining) == 2
+
+
+class TestBackupManagerRotationStorageCap:
+    """Regression: the storage cap must never delete the most-recent snapshot.
+
+    Previously, when a single scheduled snapshot exceeded max_storage_mb, the
+    cap loop deleted it right after creation (it was the only non-manual
+    candidate), so scheduled backups never persisted."""
+
+    def test_storage_cap_keeps_newest_scheduled_snapshot(self, backup_env):
+        mgr = _make_manager(backup_env)
+        with patch("modules.BackupManager.inspect", return_value=backup_env["inspector"]):
+            mgr.createGlobalSnapshot(trigger="scheduled_daily")
+            time.sleep(0.01)
+            newest = mgr.createGlobalSnapshot(trigger="scheduled_daily")
+        newest_name = newest["name"]
+
+        # Cap far below any snapshot size: cap logic would delete every
+        # deletable snapshot. The newest must still survive.
+        mgr.enforceRotation(
+            daily_keep=7, weekly_keep=4, monthly_keep=3, max_storage_mb=0.00001
+        )
+
+        names = [s["name"] for s in mgr.getGlobalSnapshots()]
+        assert newest_name in names
+
+
+class TestFullDbBackupHeavyTables:
+    """The full DB dump must exclude append-only traffic/history tables — they
+    are captured once in the shared transfer dump, and including them bloated
+    each snapshot to ~500 MB, tripping the storage cap."""
+
+    def test_heavy_ignore_args_excludes_transfer_and_history(self, backup_env):
+        mgr = _make_manager(backup_env)
+        tables = [
+            "ConfigurationsInfo", "wg0", "wg0_transfer",
+            "wg0_history_endpoint", "wg0_restrict_access", "wg0_deleted",
+        ]
+        args = mgr._heavy_ignore_args("wgdashboard", tables)
+
+        assert "--ignore-table=wgdashboard.wg0_transfer" in args
+        assert "--ignore-table=wgdashboard.wg0_history_endpoint" in args
+        # Non-heavy tables are NOT ignored
+        assert not any("ConfigurationsInfo" in a for a in args)
+        assert not any(a == "--ignore-table=wgdashboard.wg0" for a in args)
+        assert not any("restrict_access" in a for a in args)
+        assert not any("_deleted" in a for a in args)

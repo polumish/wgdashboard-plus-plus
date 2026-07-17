@@ -684,11 +684,20 @@ class BackupManager:
             if current_size <= max_bytes:
                 break
 
-            # Get all non-manual snapshots, oldest first
+            # All snapshots, newest first.
             all_snapshots = self.getGlobalSnapshots()
-            non_manual = [s for s in all_snapshots if s["type"] != "manual"]
+            # NEVER delete the most-recent snapshot for the storage cap — we
+            # always want to keep the latest backup, even if it alone exceeds
+            # the cap. Otherwise a freshly-created scheduled snapshot (the only
+            # non-manual candidate) would be deleted right after creation and
+            # scheduled backups would never persist.
+            newest_name = all_snapshots[0]["name"] if all_snapshots else None
+            non_manual = [
+                s for s in all_snapshots
+                if s["type"] != "manual" and s["name"] != newest_name
+            ]
             if not non_manual:
-                break  # Nothing left to delete (only manual snapshots remain)
+                break  # Nothing left to delete (newest + manual are protected)
 
             # Delete oldest non-manual snapshot
             oldest = non_manual[-1]
@@ -907,10 +916,26 @@ class BackupManager:
             "database": url.database or "wgdashboard",
         }
 
+    def _heavy_ignore_args(self, database: str, table_names: list) -> list:
+        """mysqldump --ignore-table args for append-only traffic/history tables.
+
+        The ``*_transfer`` and ``*_history_endpoint`` tables are large,
+        append-only, and already captured once in the shared transfer dump.
+        Including them in every full snapshot bloated each snapshot to ~500 MB,
+        which tripped the storage cap and made scheduled backups vanish.
+        """
+        return [
+            f"--ignore-table={database}.{t}"
+            for t in table_names
+            if t.endswith("_transfer") or t.endswith("_history_endpoint")
+        ]
+
     def _full_db_backup(self, dest_path: str) -> bool:
         """Create a full database dump (non-blocking).
 
-        For MySQL/MariaDB: uses mysqldump --single-transaction (no locks)
+        For MySQL/MariaDB: uses mysqldump --single-transaction (no locks),
+        excluding append-only traffic/history tables (kept in the shared
+        transfer dump) so the snapshot stays small.
         For SQLite: uses sqlite3.backup() API
         """
         import subprocess
@@ -919,6 +944,16 @@ class BackupManager:
         try:
             if db_type == "mysql":
                 creds = self._get_mysql_credentials()
+                try:
+                    with self.db_engine.connect() as conn:
+                        rows = conn.execute(text(
+                            "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES "
+                            f"WHERE TABLE_SCHEMA = '{creds['database']}'"
+                        ))
+                        all_tables = [r[0] for r in rows]
+                except Exception:
+                    all_tables = []
+                ignore_args = self._heavy_ignore_args(creds["database"], all_tables)
                 cmd = [
                     "mysqldump",
                     f"--host={creds['host']}",
@@ -928,6 +963,7 @@ class BackupManager:
                     "--single-transaction",
                     "--routines",
                     "--triggers",
+                ] + ignore_args + [
                     creds["database"],
                 ]
                 with open(dest_path, "w") as f:
