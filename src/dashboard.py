@@ -45,6 +45,7 @@ from modules.NewConfigurationTemplates import NewConfigurationTemplates
 from modules.BackupManager import BackupManager
 from modules.BackupScheduler import BackupScheduler
 from modules.PolicyRoutingManager import PolicyRoutingManager
+from modules.PeerDefaults import resolve_endpoint_allowed_ip
 from modules.BackupMigration import migrate_legacy_backups
 
 class CustomJsonEncoder(DefaultJSONProvider):
@@ -2034,26 +2035,16 @@ def API_addPeers(configName):
             allowed_ips: list[str] = data.get('allowed_ips', [])
             allowed_ips_validation: bool = data.get('allowed_ips_validation', True)
             
-            # Default endpoint_allowed_ip depends on NetworkMode
+            # Mode-aware default AllowedIPs (mesh -> config subnet, gateway ->
+            # 0.0.0.0/0, point-to-site -> server /32 + routed LANs). Shared with
+            # the client-portal add-peer path via modules.PeerDefaults so the two
+            # can never diverge again.
             _wc = WireguardConfigurations[configName]
-            _mode = getattr(_wc.configurationInfo, 'NetworkMode', 'mesh')
-            if _mode == 'gateway':
-                _configDefaultEAIP = '0.0.0.0/0'
-            elif _mode == 'point-to-site':
-                _addr = (_wc.Address or '').split(',')[0].strip()
-                try:
-                    import ipaddress as _ipaddress
-                    _configDefaultEAIP = f'{_ipaddress.ip_interface(_addr).ip}/32'
-                except (ValueError, Exception):
-                    _configDefaultEAIP = _addr
-                _routed = (getattr(_wc.configurationInfo, 'RoutedLANSubnets', '') or '').strip()
-                if _routed:
-                    _configDefaultEAIP = f'{_configDefaultEAIP}, {_routed}'
-            else:  # mesh
-                _configDefaultEAIP = AllPolicyRouting.config_subnet(_wc) or DashboardConfig.GetConfig("Peers", "peer_endpoint_allowed_ip")[1]
-            endpoint_allowed_ip: str = data.get('endpoint_allowed_ip', _configDefaultEAIP)
-            if endpoint_allowed_ip == '0.0.0.0/0' and _mode != 'gateway':
-                endpoint_allowed_ip = _configDefaultEAIP
+            endpoint_allowed_ip: str = resolve_endpoint_allowed_ip(
+                _wc,
+                DashboardConfig.GetConfig("Peers", "peer_endpoint_allowed_ip")[1],
+                data.get('endpoint_allowed_ip'),
+            )
             dns_addresses: str = data.get('DNS', DashboardConfig.GetConfig("Peers", "peer_global_DNS")[1])
             
             

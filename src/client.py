@@ -10,6 +10,7 @@ import os
 from modules.WireguardConfiguration import WireguardConfiguration
 from modules.DashboardConfig import DashboardConfig
 from modules.Email import EmailSender
+from modules.PeerDefaults import resolve_endpoint_allowed_ip
 
 
 def ResponseObject(status=True, message=None, data=None, status_code = 200) -> Flask.response_class:
@@ -342,7 +343,15 @@ def createClientBlueprint(wireguardConfigurations: dict[WireguardConfiguration],
             "allowed_ip": assigned_ip,
             "name": data.get('name', ''),
             "DNS": data.get('DNS', dashboardConfig.GetConfig("Peers", "peer_global_DNS")[1]),
-            "endpoint_allowed_ip": data.get('endpoint_allowed_ip', dashboardConfig.GetConfig("Peers", "peer_endpoint_allowed_ip")[1]),
+            # Mode-aware default (mesh -> config subnet, gateway -> 0.0.0.0/0,
+            # point-to-site -> server /32). A bare 0.0.0.0/0 on a non-gateway
+            # config is rejected so managed peers are never full-tunnel by
+            # accident. Shared helper keeps this identical to the admin path.
+            "endpoint_allowed_ip": resolve_endpoint_allowed_ip(
+                wc,
+                dashboardConfig.GetConfig("Peers", "peer_endpoint_allowed_ip")[1],
+                data.get('endpoint_allowed_ip'),
+            ),
             "mtu": data.get('mtu', dashboardConfig.GetConfig("Peers", "peer_MTU")[1]),
             "keepalive": data.get('keepalive', dashboardConfig.GetConfig("Peers", "peer_keep_alive")[1]),
             "preshared_key": data.get('preshared_key', ''),
