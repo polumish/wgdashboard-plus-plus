@@ -28,7 +28,10 @@ deploy:
     - cd /opt/WGDashboard
     - git fetch gitlab
     - git checkout main
-    - git merge gitlab/main --ff-only
+    # Force the deploy checkout to match main. reset --hard (not merge --ff-only)
+    # so stray local edits in the runner working tree can't abort the deploy
+    # (and, by extension, skip the mirror-github stage that depends on it).
+    - git reset --hard gitlab/main
     - cd src
     - source venv/bin/activate
     - pip install -r requirements.txt --quiet 2>/dev/null
