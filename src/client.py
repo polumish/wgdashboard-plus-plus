@@ -45,10 +45,23 @@ def _is_trusted_ip(dashboardConfig):
                 pass
     return False
 
-def createClientBlueprint(wireguardConfigurations: dict[WireguardConfiguration], dashboardConfig: DashboardConfig, dashboardClients: DashboardClients):
-        
+def createClientBlueprint(wireguardConfigurations: dict[WireguardConfiguration], dashboardConfig: DashboardConfig, dashboardClients: DashboardClients, getBackupScheduler=None):
+
     client = Blueprint('client', __name__, template_folder=os.path.abspath("./static/dist/WGDashboardClient"))
     prefix = f'{dashboardConfig.GetConfig("Server", "app_prefix")[1]}/client'
+
+    def _fireBackup(configName, action, detail):
+        """Trigger a pre-change backup for manager self-service changes, matching
+        the admin path. Best-effort — never blocks or fails the request. The
+        scheduler is resolved lazily because it is created after this blueprint."""
+        if getBackupScheduler is None:
+            return
+        try:
+            scheduler = getBackupScheduler()
+            if scheduler is not None:
+                scheduler.onPeerChange(configName, action, detail)
+        except Exception:
+            pass
 
     def login_required(f):
         @wraps(f)
@@ -357,6 +370,7 @@ def createClientBlueprint(wireguardConfigurations: dict[WireguardConfiguration],
             "preshared_key": data.get('preshared_key', ''),
             "advanced_security": "off",
         }
+        _fireBackup(configName, "peer_added", peer.get("name") or "managed peer")
         status, peers_added, msg = wc.addPeers([peer])
         return ResponseObject(status, msg, data=peers_added)
 
@@ -372,6 +386,7 @@ def createClientBlueprint(wireguardConfigurations: dict[WireguardConfiguration],
         if not peers:
             return ResponseObject(False, "No peers specified")
         wc = wireguardConfigurations[configName]
+        _fireBackup(configName, "peer_deleted", f"{len(peers)} peers")
         status, msg = wc.deletePeers(peers, [], [])
         return ResponseObject(status, msg)
 

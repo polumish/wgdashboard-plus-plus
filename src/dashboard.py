@@ -308,7 +308,7 @@ with app.app_context():
     NewConfigurationTemplates: NewConfigurationTemplates = NewConfigurationTemplates()
     InitWireguardConfigurationsList(startup=True)
     DashboardClients: DashboardClients = DashboardClients(WireguardConfigurations)
-    app.register_blueprint(createClientBlueprint(WireguardConfigurations, DashboardConfig, DashboardClients))
+    app.register_blueprint(createClientBlueprint(WireguardConfigurations, DashboardConfig, DashboardClients, getBackupScheduler=lambda: AllBackupScheduler))
     _applySessionTimeout()
 
 with app.app_context():
