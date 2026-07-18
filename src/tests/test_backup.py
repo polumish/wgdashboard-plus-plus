@@ -592,3 +592,51 @@ class TestDiskAwareCap:
         mgr = _make_manager(backup_env)
         cap = mgr.effectiveStorageCapBytes(500, free_fraction=0.6, free_bytes=100 * 1024 ** 3)
         assert cap == 500 * 1024 * 1024
+
+
+class TestBackupLedger:
+    """Durable event ledger — the source of truth for 'did backups run?' that
+    survives restarts (the in-memory scheduler state did not, which is why a
+    2-month outage went unnoticed)."""
+
+    def test_record_and_read_events_newest_first(self, backup_env):
+        mgr = _make_manager(backup_env)
+        mgr._record_event("global", "manual", "success", name="snap_x", size=123)
+        mgr._record_event("global", "scheduled_daily", "failure", error="boom")
+        evs = mgr.readEvents()
+        assert len(evs) == 2
+        assert evs[0]["status"] == "failure"
+        assert evs[1]["name"] == "snap_x"
+
+    def test_ledger_is_ring_buffer(self, backup_env):
+        mgr = _make_manager(backup_env)
+        for i in range(250):
+            mgr._record_event("global", "manual", "success", name=f"s{i}")
+        assert len(mgr.readEvents()) <= 200
+
+
+class TestBackupHealth:
+    def test_health_green_after_recent_success(self, backup_env):
+        mgr = _make_manager(backup_env)
+        mgr._record_event("global", "scheduled_daily", "success", name="s", size=100)
+        h = mgr.health()
+        assert h["status"] == "green"
+        assert h["last_global_success"] is not None
+        assert "disk_free" in h and "local_total_size" in h
+
+    def test_health_red_after_consecutive_failures(self, backup_env):
+        mgr = _make_manager(backup_env)
+        for _ in range(3):
+            mgr._record_event("global", "scheduled_daily", "failure", error="x")
+        h = mgr.health()
+        assert h["status"] == "red"
+        assert h["consecutive_failures"] >= 3
+
+    def test_health_reads_offhost_status_file(self, backup_env):
+        mgr = _make_manager(backup_env)
+        p = os.path.join(str(backup_env["tmp_path"]), "offhost-status")
+        with open(p, "w") as f:
+            f.write("OK 2026-07-18T03:52:08Z")
+        h = mgr.health(offhost_status_path=p)
+        assert h["off_host"]["status"] == "OK"
+        assert h["off_host"]["timestamp"] == "2026-07-18T03:52:08Z"

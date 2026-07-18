@@ -889,6 +889,10 @@ def API_restoreWireguardConfigurationBackup():
 
 # === New Backup API Routes ===
 
+@app.get(f'{APP_PREFIX}/api/backup/health')
+def API_backup_health():
+    return ResponseObject(data=AllBackupManager.health())
+
 @app.get(f'{APP_PREFIX}/api/backup/global/list')
 def API_backup_global_list():
     filter_type = request.args.get("filter", None)

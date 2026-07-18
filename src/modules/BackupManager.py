@@ -203,10 +203,13 @@ class BackupManager:
                 with open(manifest_path, "w") as f:
                     json.dump(manifest, f, indent=2, default=str)
 
+                self._record_event("global", trigger, "success", name=name,
+                                   size=manifest.get("size_bytes"))
                 return {"status": True, "name": name, "manifest": manifest}
 
             except Exception as exc:  # noqa: BLE001
                 shutil.rmtree(snap_dir, ignore_errors=True)
+                self._record_event("global", trigger, "failure", error=exc)
                 return {"status": False, "error": str(exc)}
 
     def getSnapshotDetails(self, name: str) -> dict:
@@ -389,10 +392,14 @@ class BackupManager:
                 with open(manifest_path, "w") as f:
                     json.dump(manifest, f, indent=2, default=str)
 
+                self._record_event("per-config", trigger, "success", name=name,
+                                   size=manifest.get("size_bytes"))
                 return {"status": True, "name": name, "manifest": manifest}
 
             except Exception as exc:  # noqa: BLE001
                 shutil.rmtree(backup_dir, ignore_errors=True)
+                self._record_event("per-config", trigger, "failure",
+                                   name=config_name, error=exc)
                 return {"status": False, "error": str(exc)}
 
     def getConfigBackups(self, config_name: str) -> list:
@@ -1135,6 +1142,116 @@ class BackupManager:
                 if self._delete_directory(entry.path):
                     removed += 1
         return removed
+
+    # -----------------------------------------------------------------------
+    # Backup event ledger + health (P1 observability)
+    # -----------------------------------------------------------------------
+    def _ledger_path(self) -> str:
+        return os.path.join(self.backup_path, "backup_events.json")
+
+    def _record_event(self, scope: str, trigger: str, status: str,
+                      name: Optional[str] = None, size: Optional[int] = None,
+                      error=None) -> None:
+        """Append a backup event to the durable ledger (ring buffer, best-effort).
+        The ledger is the restart-surviving source of truth for backup health."""
+        ev = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "scope": scope, "trigger": trigger, "status": status,
+            "name": name, "size": size,
+            "error": (str(error)[:500] if error else None),
+        }
+        try:
+            path = self._ledger_path()
+            events = []
+            if os.path.isfile(path):
+                try:
+                    with open(path) as f:
+                        events = json.load(f)
+                    if not isinstance(events, list):
+                        events = []
+                except (ValueError, OSError):
+                    events = []
+            events.append(ev)
+            events = events[-200:]
+            os.makedirs(self.backup_path, exist_ok=True)
+            tmp = path + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(events, f)
+            os.replace(tmp, path)
+        except OSError:
+            pass  # never break a backup over the ledger
+
+    def readEvents(self, limit: Optional[int] = None) -> list:
+        """Return ledger events newest-first."""
+        path = self._ledger_path()
+        if not os.path.isfile(path):
+            return []
+        try:
+            with open(path) as f:
+                events = json.load(f)
+            if not isinstance(events, list):
+                return []
+        except (ValueError, OSError):
+            return []
+        events = list(reversed(events))
+        return events[:limit] if limit else events
+
+    def _read_offhost_status(self, path: Optional[str]) -> dict:
+        """Parse the off-host (PBS) status marker 'OK <ts>' / 'FAILED <ts>'."""
+        out = {"status": "unknown", "timestamp": None}
+        try:
+            if path and os.path.isfile(path):
+                parts = open(path).read().split()
+                if parts:
+                    out["status"] = parts[0]
+                    if len(parts) > 1:
+                        out["timestamp"] = parts[1]
+        except OSError:
+            pass
+        return out
+
+    def health(self, now=None, offhost_status_path: Optional[str] = None) -> dict:
+        """Read-model of backup health for the UI / monitoring."""
+        events = self.readEvents()
+
+        def _last_success(scope):
+            for e in events:
+                if e.get("scope") == scope and e.get("status") == "success":
+                    return e.get("ts")
+            return None
+
+        last_global = _last_success("global")
+        last_perconfig = _last_success("per-config")
+        consecutive = 0
+        for e in events:
+            if e.get("status") == "failure":
+                consecutive += 1
+            elif e.get("status") == "success":
+                break
+        last_failure = next((e.get("ts") for e in events if e.get("status") == "failure"), None)
+        try:
+            disk_free = shutil.disk_usage(self.backup_path).free
+        except OSError:
+            disk_free = None
+        off = self._read_offhost_status(
+            offhost_status_path or "/var/lib/wg-dashboard-pbs/last-status")
+        if consecutive >= 3 or last_global is None:
+            status = "red"
+        elif off.get("status") == "FAILED":
+            status = "amber"
+        else:
+            status = "green"
+        return {
+            "status": status,
+            "last_global_success": last_global,
+            "last_perconfig_success": last_perconfig,
+            "last_failure": last_failure,
+            "consecutive_failures": consecutive,
+            "disk_free": disk_free,
+            "local_total_size": self._get_dir_size(self.backup_path),
+            "off_host": off,
+            "events_tail": events[:10],
+        }
 
     def _read_snapshot_list(
         self, directory: str, filter_type: Optional[str] = None

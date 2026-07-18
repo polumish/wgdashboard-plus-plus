@@ -7,8 +7,11 @@ Supports:
   - Max-wait cap so a busy config is still backed up eventually
 """
 
+import logging
 import threading
 from datetime import datetime, timezone
+
+_log = logging.getLogger("wgdashboard.backup")
 
 
 class BackupScheduler:
@@ -105,8 +108,8 @@ class BackupScheduler:
         while self._running:
             try:
                 self._check_scheduled_backups()
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as e:  # noqa: BLE001
+                _log.error("scheduled backup check failed: %s", e)
             # Sleep in small increments so stop() is responsive
             for _ in range(60):
                 if not self._running:
@@ -204,6 +207,9 @@ class BackupScheduler:
         """Create a global snapshot for the given schedule type and enforce rotation."""
         trigger = f"scheduled_{sched}"
         result = self.bm.createGlobalSnapshot(trigger=trigger)
+
+        if not result.get("status"):
+            _log.error("scheduled %s backup FAILED: %s", sched, result.get("error"))
 
         if result.get("status"):
             self._last_scheduled[sched] = datetime.now(timezone.utc)
