@@ -5,6 +5,24 @@ All notable changes to WgDashboard++ will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to a custom versioning scheme: **X.YZ** where X=major, Y=feature (+0.1), Z=bugfix (+0.01).
 
+## [v1.8.0] - 2026-07-18
+
+### Added
+- **Backup redesign — a trustworthy, disaster-proof, verifiable backup system (4 pillars).**
+  - **Off-site DR to Proxmox Backup Server** — file-level backup of `/etc/wireguard` + a DB dump (heavy `*_transfer`/`*_history_endpoint` tables excluded) + the ini to PBS via `proxmox-backup-client`, client-side encrypted, driven by a standalone systemd timer independent of the app scheduler. Failure alert via systemd `OnFailure` → email. Restore round-trip verified.
+  - **Observability** — a durable event ledger (`backups/backup_events.json`) recording every backup success/failure, a `health()` read-model and `GET /api/backup/health` (green/amber/red, last success/failure, consecutive failures, disk free, off-site PBS status, last restore-test), and a **Backup Health card** in Settings → Backup. The scheduler now imports the previously-missing `logging` module and logs failures instead of silently swallowing them.
+  - **Restore verification** — `runRestoreTest()` proves the newest snapshot is intact (checksums) and has a restorable DB component (read-only), runs after each scheduled backup and via `GET /api/backup/restore/test`; surfaced as `health().last_restore_test`.
+
+### Fixed
+- **Client-portal managed peers were created as `0.0.0.0/0` (full tunnel) on mesh configs** — the manager self-service add-peer path (`client.py`) used the raw global default `peer_endpoint_allowed_ip` (=`0.0.0.0/0`) while the admin path was mode-aware. On configs with an empty per-config override, `Peer.downloadPeer` falls back to the per-peer value, so every managed client got a default route into the tunnel. Extracted the mode-aware logic to `modules/PeerDefaults.py` (`resolve_endpoint_allowed_ip`), now used by BOTH add-peer paths; a bare `0.0.0.0/0` on a non-gateway config is rejected and replaced with the config subnet.
+- **`_syncGatewaySubnetsToConfig` silently dropped manually-added LAN routes** — it recomputed the override + `RoutedLANSubnets` purely from gateway/server peers + the tunnel subnet on every peer operation, so a manual route (e.g. a specific server `/32`) was clobbered. This caused recurring "clients lost access to X" incidents (Hozpack's 1C server, Vano_Golubka). `PeerDefaults.merge_preserving_manual()` now unions the freshly-computed subnets with the routes already in `RoutedLANSubnets`.
+- **Scheduled global backups silently never persisted for ~2 months** — each snapshot was ~492 MB (the full mysqldump included the append-only `*_transfer` tables, which are also captured once in the shared transfer dump), exceeding `max_storage_mb=500`, so `enforceRotation`'s storage cap deleted the freshly-created scheduled snapshot; all errors were swallowed. Fixed by excluding heavy tables from the full dump via `--ignore-table` (snapshot ~492 MB → ~0.3 MB) and never deleting the newest snapshot for the storage cap.
+- **Client-portal peer add/delete did not trigger backups** — managed self-service changes bypassed the backup scheduler; they now fire a best-effort pre-change backup like the admin path.
+
+### Changed
+- **Storage cap is now disk-aware** — `effectiveStorageCapBytes` = min(configured MB, 60 % of free disk) replaces the bare `max_storage_mb` (default raised 500 → 5000). Orphaned manifest-less snapshot dirs (from failed/half-deleted snapshots) are cleaned up at boot and before each rotation.
+- **CI `deploy` job** uses `git reset --hard` instead of `git merge --ff-only` so a stray edit in the runner working tree can't abort the deploy and skip the GitHub mirror.
+
 ## [v1.7.5] - 2026-05-09
 
 ### Fixed
