@@ -7,6 +7,7 @@ from modules.PeerDefaults import (
     mesh_config_subnet,
     default_endpoint_allowed_ip,
     resolve_endpoint_allowed_ip,
+    merge_preserving_manual,
 )
 
 GLOBAL_DEFAULT = "0.0.0.0/0"
@@ -69,3 +70,22 @@ def test_point_to_site_includes_routed_lan_subnets():
 def test_mesh_unparseable_address_falls_back_to_global_default():
     wc = _wc("", mode="mesh")
     assert resolve_endpoint_allowed_ip(wc, GLOBAL_DEFAULT, None) == GLOBAL_DEFAULT
+
+
+def test_merge_preserves_manual_lan_route():
+    # config subnet is recomputed; a manually-added LAN route must survive
+    assert merge_preserving_manual({"10.200.5.0/24"}, "10.200.5.0/24, 10.0.50.163/32") \
+        == "10.0.50.163/32, 10.200.5.0/24"
+
+
+def test_merge_adds_computed_and_dedups():
+    assert merge_preserving_manual({"10.200.5.0/24", "192.168.1.0/24"}, "10.200.5.0/24") \
+        == "10.200.5.0/24, 192.168.1.0/24"
+
+
+def test_merge_empty_existing():
+    assert merge_preserving_manual({"10.200.5.0/24"}, "") == "10.200.5.0/24"
+
+
+def test_merge_empty_all():
+    assert merge_preserving_manual(set(), "") == ""

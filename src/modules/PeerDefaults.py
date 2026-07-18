@@ -53,3 +53,20 @@ def resolve_endpoint_allowed_ip(wc, global_default, requested):
     if eaip == "0.0.0.0/0" and mode != "gateway":
         eaip = default
     return eaip
+
+
+def merge_preserving_manual(computed, existing_routed):
+    """Union freshly-computed LAN subnets with routes already present in the
+    config's RoutedLANSubnets, so manually-added LAN routes (e.g. a specific
+    server /32) survive a gateway/peer re-sync instead of being clobbered.
+
+    Fix for the recurring override-reset that dropped manual routes (Hozpack
+    10.0.50.163/32, Vano_Golubka) whenever _syncGatewaySubnetsToConfig
+    recomputed the override on a peer operation.
+    """
+    result = set(computed)
+    for part in (existing_routed or "").split(","):
+        part = part.strip()
+        if part:
+            result.add(part)
+    return ", ".join(sorted(result))

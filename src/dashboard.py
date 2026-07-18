@@ -45,7 +45,7 @@ from modules.NewConfigurationTemplates import NewConfigurationTemplates
 from modules.BackupManager import BackupManager
 from modules.BackupScheduler import BackupScheduler
 from modules.PolicyRoutingManager import PolicyRoutingManager
-from modules.PeerDefaults import resolve_endpoint_allowed_ip
+from modules.PeerDefaults import resolve_endpoint_allowed_ip, merge_preserving_manual
 from modules.BackupMigration import migrate_legacy_backups
 
 class CustomJsonEncoder(DefaultJSONProvider):
@@ -1817,7 +1817,10 @@ def _syncGatewaySubnetsToConfig(wc):
         if tunnelSubnet:
             lanSubnets.add(tunnelSubnet)
     # point-to-site: no tunnel subnet, only server /32s + gateway LANs
-    lanStr = ', '.join(sorted(lanSubnets)) if lanSubnets else ''
+    # Preserve any manually-added LAN routes already in RoutedLANSubnets so a
+    # re-sync never clobbers them (fixes the recurring override reset that
+    # dropped manual routes like Hozpack's 10.0.50.163/32 on peer operations).
+    lanStr = merge_preserving_manual(lanSubnets, wc.configurationInfo.RoutedLANSubnets)
     # Update EndpointAllowedIPs
     wc.configurationInfo.OverridePeerSettings.EndpointAllowedIPs = lanStr
     # Update RoutedLANSubnets
