@@ -241,6 +241,14 @@ class BackupScheduler:
                 max_storage_mb=max_storage_mb,
             )
 
+            # Prove the fresh snapshot is actually restorable (best-effort;
+            # result recorded to the ledger / surfaced by health()).
+            if self._is_truthy(self._get_config("Backup", "restore_test_enabled")):
+                try:
+                    self.bm.runRestoreTest()
+                except Exception as e:  # noqa: BLE001
+                    _log.error("restore-test after %s backup failed: %s", sched, e)
+
     # -----------------------------------------------------------------------
     # Event-driven backups
     # -----------------------------------------------------------------------

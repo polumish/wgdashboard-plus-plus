@@ -640,3 +640,37 @@ class TestBackupHealth:
         h = mgr.health(offhost_status_path=p)
         assert h["off_host"]["status"] == "OK"
         assert h["off_host"]["timestamp"] == "2026-07-18T03:52:08Z"
+
+
+class TestRestoreTest:
+    """A backup you have never restored is a hypothesis. runRestoreTest proves
+    the newest snapshot is intact (checksums) and has a restorable DB component,
+    and records the result to the ledger."""
+
+    def test_restore_test_passes_on_valid_snapshot(self, backup_env):
+        mgr = _make_manager(backup_env)
+        with patch("modules.BackupManager.inspect", return_value=backup_env["inspector"]):
+            mgr.createGlobalSnapshot(trigger="manual")
+        res = mgr.runRestoreTest()
+        assert res["status"] is True
+        evs = [e for e in mgr.readEvents() if e.get("trigger") == "restore_test"]
+        assert evs and evs[0]["status"] == "success"
+
+    def test_restore_test_fails_when_no_snapshots(self, backup_env):
+        mgr = _make_manager(backup_env)
+        res = mgr.runRestoreTest()
+        assert res["status"] is False
+        evs = [e for e in mgr.readEvents() if e.get("trigger") == "restore_test"]
+        assert evs and evs[0]["status"] == "failure"
+
+    def test_restore_test_detects_corruption(self, backup_env):
+        mgr = _make_manager(backup_env)
+        with patch("modules.BackupManager.inspect", return_value=backup_env["inspector"]):
+            r = mgr.createGlobalSnapshot(trigger="manual")
+        # tamper with a backed-up file so its checksum no longer matches
+        ini = os.path.join(backup_env["backup_path"], "global", r["name"],
+                           "settings", "wg-dashboard.ini")
+        with open(ini, "a") as f:
+            f.write("tampered")
+        res = mgr.runRestoreTest()
+        assert res["status"] is False

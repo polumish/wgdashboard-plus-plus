@@ -112,7 +112,8 @@ class DashboardConfig:
                 "auto_backup_config_changes": "true",
                 "auto_backup_debounce_seconds": "30",
                 "auto_backup_max_wait_seconds": "300",
-                "per_config_keep": "10"
+                "per_config_keep": "10",
+                "restore_test_enabled": "true"
             }
         }
 

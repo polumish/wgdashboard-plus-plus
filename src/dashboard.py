@@ -893,6 +893,11 @@ def API_restoreWireguardConfigurationBackup():
 def API_backup_health():
     return ResponseObject(data=AllBackupManager.health())
 
+@app.get(f'{APP_PREFIX}/api/backup/restore/test')
+def API_backup_restore_test():
+    result = AllBackupManager.runRestoreTest()
+    return ResponseObject(status=result.get("status", False), data=result)
+
 @app.get(f'{APP_PREFIX}/api/backup/global/list')
 def API_backup_global_list():
     filter_type = request.args.get("filter", None)

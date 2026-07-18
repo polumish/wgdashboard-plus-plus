@@ -1235,6 +1235,9 @@ class BackupManager:
             elif e.get("status") == "success":
                 break
         last_failure = next((e.get("ts") for e in events if e.get("status") == "failure"), None)
+        last_restore_test = next((
+            {"ts": e.get("ts"), "status": e.get("status"), "name": e.get("name")}
+            for e in events if e.get("trigger") == "restore_test"), None)
         try:
             disk_free = shutil.disk_usage(self.backup_path).free
         except OSError:
@@ -1256,8 +1259,45 @@ class BackupManager:
             "disk_free": disk_free,
             "local_total_size": self._get_dir_size(self.backup_path),
             "off_host": off,
+            "last_restore_test": last_restore_test,
             "events_tail": events[:10],
         }
+
+    def runRestoreTest(self) -> dict:
+        """Prove the newest global snapshot is intact (checksums) and has a
+        restorable DB component. Records pass/fail to the ledger. Read-only —
+        never touches the live database."""
+        snaps = self.getGlobalSnapshots()
+        if not snaps:
+            self._record_event("global", "restore_test", "failure",
+                               error="no snapshots to test")
+            return {"status": False, "error": "no snapshots to test"}
+        name = snaps[0]["name"]
+        snap_dir = os.path.join(self.backup_path, "global", name)
+        if not self.verifyIntegrity(snap_dir):
+            self._record_event("global", "restore_test", "failure", name=name,
+                               error="integrity check failed")
+            return {"status": False, "name": name, "error": "integrity check failed"}
+        db_dir = os.path.join(snap_dir, "db")
+        sql = os.path.join(db_dir, "wgdashboard.sql")
+        peers = os.path.join(db_dir, "peers.json")
+        ok = False
+        detail = "no DB component in snapshot"
+        if os.path.isfile(sql):
+            try:
+                with open(sql, "r", errors="ignore") as f:
+                    tables = f.read(200000).count("CREATE TABLE")
+                ok = tables > 0
+                detail = f"full SQL dump, {tables} tables"
+            except OSError:
+                ok = False
+        elif os.path.isfile(peers):
+            ok = True
+            detail = "JSON export present"
+        status = "success" if ok else "failure"
+        self._record_event("global", "restore_test", status, name=name,
+                           error=None if ok else "no valid DB component")
+        return {"status": ok, "name": name, "detail": detail}
 
     def _read_snapshot_list(
         self, directory: str, filter_type: Optional[str] = None
