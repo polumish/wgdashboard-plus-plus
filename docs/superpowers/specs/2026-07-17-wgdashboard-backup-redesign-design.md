@@ -5,6 +5,12 @@
 
 ---
 
+## 0. Implementation status
+
+- **P2 (PBS off-host DR): DONE & verified 2026-07-18.** proxmox-backup-client 4.2.2 on VM 4001; scoped PBS user+token `wgdash@pbs!vm4001` (role DatastorePowerUser on `pbs-data`); client-side encryption key + token in Vaultwarden folder `WGDashboard`; `/usr/local/bin/pbs-backup.sh` (mysqldump minus heavy tables + `/etc/wireguard` + ini, encrypted) driven by a nightly systemd timer (23:31 UTC); **failure alerting** via systemd `OnFailure` → email (app SMTP) — tested, delivered. First backup + **restore round-trip verified** (restored `Vano_Golubka.conf` matches live; 58 tables; heavy tables absent). Snapshot group `host/wg-dashboard`.
+  - **Deferred (safe follow-up):** automated retention/prune. Client-side group prune needs `Datastore.Prune` (privsep) and a datastore-wide prune-job would touch the cluster's VM backups — so retention should be done via a dedicated `wg-dashboard` **namespace** + namespace-scoped prune/verify jobs (namespace creation needs root on PBS). Non-urgent: each backup is ~160 KB.
+- **P1/P3/P4:** not started (design below).
+
 ## 1. Why this document exists
 
 This session found the app-level backup silently broken for ~2 months: scheduled global snapshots were created nightly and immediately deleted by rotation (each ~492 MB > `max_storage_mb=500`), while the UI showed only 2 stale manual snapshots. We shipped two fixes (heavy-table exclusion → snapshots ~0.3 MB; "never delete the newest snapshot"; plus a client-portal backup hook). Those stopped the bleeding. This spec is about making the whole feature **trustworthy, disaster-proof, efficient, and easy to restore** — not just un-broken.
