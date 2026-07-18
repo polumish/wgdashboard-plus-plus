@@ -1221,6 +1221,12 @@ class BackupManager:
             return None
 
         last_global = _last_success("global")
+        if last_global is None:
+            # Ledger may post-date existing snapshots; fall back to the newest
+            # snapshot on disk so a fresh ledger doesn't read as a false 'red'.
+            snaps = self.getGlobalSnapshots()
+            if snaps:
+                last_global = snaps[0].get("date")
         last_perconfig = _last_success("per-config")
         consecutive = 0
         for e in events:
