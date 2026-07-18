@@ -547,3 +547,48 @@ class TestFullDbBackupHeavyTables:
         assert not any(a == "--ignore-table=wgdashboard.wg0" for a in args)
         assert not any("restrict_access" in a for a in args)
         assert not any("_deleted" in a for a in args)
+
+
+class TestOrphanCleanup:
+    """Failed/half-deleted snapshots leave manifest-less dirs that clutter the
+    UI and waste space. cleanupOrphans removes them once past a grace period,
+    but never touches valid snapshots or freshly-created (in-progress) dirs."""
+
+    def test_cleanup_removes_old_manifestless_dirs_only(self, backup_env):
+        mgr = _make_manager(backup_env)
+        with patch("modules.BackupManager.inspect", return_value=backup_env["inspector"]):
+            good = mgr.createGlobalSnapshot(trigger="manual")["name"]
+        gdir = os.path.join(backup_env["backup_path"], "global")
+
+        orphan = os.path.join(gdir, "snapshot_orphan")
+        os.makedirs(orphan)
+        with open(os.path.join(orphan, "junk"), "w") as f:
+            f.write("x")
+        old = time.time() - 7200
+        os.utime(orphan, (old, old))
+
+        fresh = os.path.join(gdir, "snapshot_inprogress")
+        os.makedirs(fresh)  # current mtime -> within grace -> kept
+
+        removed = mgr.cleanupOrphans(grace_seconds=3600)
+
+        assert not os.path.isdir(orphan), "old manifest-less dir must be removed"
+        assert os.path.isdir(fresh), "fresh in-progress dir must be kept"
+        assert os.path.isdir(os.path.join(gdir, good)), "valid snapshot must be kept"
+        assert removed >= 1
+
+
+class TestDiskAwareCap:
+    """The storage cap must be disk-aware, not an arbitrary 500 MB: never let
+    the local backup tier consume more than a fraction of free disk."""
+
+    def test_cap_is_min_of_configured_and_free_fraction(self, backup_env):
+        mgr = _make_manager(backup_env)
+        # configured 5000 MB, but only 1 GiB free * 0.6 = 600 MiB -> disk wins
+        cap = mgr.effectiveStorageCapBytes(5000, free_fraction=0.6, free_bytes=1024 ** 3)
+        assert cap == int(0.6 * 1024 ** 3)
+
+    def test_cap_uses_configured_when_disk_ample(self, backup_env):
+        mgr = _make_manager(backup_env)
+        cap = mgr.effectiveStorageCapBytes(500, free_fraction=0.6, free_bytes=100 * 1024 ** 3)
+        assert cap == 500 * 1024 * 1024

@@ -15,6 +15,7 @@ import re
 import shutil
 import tarfile
 import threading
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -660,6 +661,9 @@ class BackupManager:
 
         Manual snapshots are NEVER auto-deleted.
         """
+        # Clear leftovers from any failed/half-deleted snapshots first.
+        self.cleanupOrphans()
+
         # filter_type uses raw manifest trigger values; type map for keep limits
         keep_map = {
             "scheduled_daily": daily_keep,
@@ -675,8 +679,8 @@ class BackupManager:
             for snap in to_delete:
                 self.deleteGlobalSnapshot(snap["name"])
 
-        # Enforce total storage cap
-        max_bytes = max_storage_mb * 1024 * 1024
+        # Enforce total storage cap (disk-aware, not a bare configured MB)
+        max_bytes = self.effectiveStorageCapBytes(max_storage_mb)
         global_dir = os.path.join(self.backup_path, "global")
 
         while True:
@@ -1084,6 +1088,53 @@ class BackupManager:
         "restore_point": "restore_point",
         "legacy_migration": "legacy",
     }
+
+    def effectiveStorageCapBytes(
+        self, max_storage_mb, free_fraction: float = 0.6, free_bytes: Optional[int] = None
+    ) -> int:
+        """Disk-aware storage cap in bytes: the smaller of the configured MB and
+        a fraction of free disk. Keeps the local backup tier from ever eating
+        the disk regardless of the configured value (replaces the bare 500 MB)."""
+        try:
+            configured = int(float(max_storage_mb) * 1024 * 1024)
+        except (TypeError, ValueError):
+            configured = 500 * 1024 * 1024
+        if free_bytes is None:
+            try:
+                free_bytes = shutil.disk_usage(self.backup_path).free
+            except OSError:
+                return configured
+        return min(configured, int(free_bytes * free_fraction))
+
+    def cleanupOrphans(self, grace_seconds: float = 3600) -> int:
+        """Remove global/per-config backup dirs that lack a valid manifest.json
+        and are older than grace_seconds (so in-progress writes are never
+        touched). Fixes leftovers from failed/half-deleted snapshots. Returns
+        the number of directories removed."""
+        removed = 0
+        now = time.time()
+        roots = [os.path.join(self.backup_path, "global")]
+        perconfig = os.path.join(self.backup_path, "per-config")
+        if os.path.isdir(perconfig):
+            for cfg in os.scandir(perconfig):
+                if cfg.is_dir():
+                    roots.append(cfg.path)
+        for root in roots:
+            if not os.path.isdir(root):
+                continue
+            for entry in os.scandir(root):
+                if not entry.is_dir():
+                    continue
+                if os.path.isfile(os.path.join(entry.path, "manifest.json")):
+                    continue  # valid snapshot
+                try:
+                    if (now - entry.stat().st_mtime) < grace_seconds:
+                        continue  # too fresh — may be an in-progress write
+                except OSError:
+                    continue
+                if self._delete_directory(entry.path):
+                    removed += 1
+        return removed
 
     def _read_snapshot_list(
         self, directory: str, filter_type: Optional[str] = None

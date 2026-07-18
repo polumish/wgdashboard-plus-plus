@@ -107,7 +107,7 @@ class DashboardConfig:
                 "monthly_enabled": "true",
                 "monthly_day": "1",
                 "monthly_keep": "3",
-                "max_storage_mb": "500",
+                "max_storage_mb": "5000",
                 "auto_backup_peer_changes": "true",
                 "auto_backup_config_changes": "true",
                 "auto_backup_debounce_seconds": "30",

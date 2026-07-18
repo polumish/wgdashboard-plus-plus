@@ -56,6 +56,11 @@ class BackupScheduler:
         self._running = True
         # Recover last scheduled times from existing backups to avoid duplicates after restart
         self._recover_last_scheduled()
+        # Clear leftover manifest-less dirs from past failed snapshots at boot.
+        try:
+            self.bm.cleanupOrphans()
+        except Exception:  # noqa: BLE001
+            pass
         t = threading.Thread(target=self._schedule_loop, daemon=True, name="BackupScheduler")
         t.start()
         return t
