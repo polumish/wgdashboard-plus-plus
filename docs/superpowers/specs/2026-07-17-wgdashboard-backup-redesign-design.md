@@ -47,13 +47,17 @@ Each pillar is independently shippable and independently valuable. Recommended o
 - **Alerting.** On N consecutive scheduled failures or "no successful global backup in > daily_interval × 1.5", email via the existing `EmailSender` (to `sergey.karlovskij@volia-software.com` / configurable). Amber/red also shown in UI. *Decision:* email only for v1 (SMTP already works); webhook/Matrix optional later.
 - **Tests:** ledger written on success/failure; health computes green/amber/red from fixtures; alert fires exactly once per failure streak (debounced).
 
-### P2 — Off-host DR  *(ship second; biggest risk reducer)*
-- **Replicate each snapshot off VM 4001**, encrypted, with independent retention. The app creates the local snapshot, then pushes it to a remote repo.
-- **Decision — tool: `restic`** to an off-host repository. Rationale: content-addressed dedup (tiny snapshots stay tiny; heavy dumps dedup well), built-in AES encryption, built-in retention (`forget --keep-daily/weekly/monthly`), `check` for integrity, and simple restore. Alternatives considered: *borg* (also great, but restic's multi-backend + single static binary is easier on a minimal VM), *rsync/rclone* (no dedup/encryption/retention — rejected), *push into PBS* (PBS is block/VM-oriented; app-file granularity is awkward).
-- **Decision — target: Hetzner Storage Box (SFTP/rest-server) or the existing PBS host `pbs-vs10` as an SFTP restic repo.** Recommend a **dedicated Hetzner Storage Box** (cheap, same DC region, off the Proxmox cluster so a cluster-wide failure doesn't take it out). Alternative: restic REST server on `pbs-vs10` (reuses existing hardware/ZFS). *This is the one choice I'd most want your confirmation on — it has a small recurring cost and a credential.* Second copy to homelab (ph0 NFS over WG) is a cheap optional third leg for true 3-2-1.
-- **Integration:** a `RemoteReplicator` module invoked after each successful snapshot (and on a schedule for catch-up). Restic repo password + target creds live in **Vault** (referenced by id, never in the ini/plaintext). Health panel shows last off-host success + repo `check` result.
-- **Restore path:** `restic restore` to a scratch dir → feed into existing `restoreFromSnapshot`. No new restore logic, just a fetch step.
-- **Tests:** replicate → list on remote → restore round-trip on a scratch repo (local restic repo in tests, no network); failure of the remote never breaks the local backup (best-effort, recorded).
+### P2 — Off-host DR via existing PBS  *(ship second; biggest risk reducer)*
+**Decision — target: the existing Proxmox Backup Server `pbs-vs10` (94.130.207.10), datastore `pbs-data`, file-level backups via `proxmox-backup-client`.** Sergiy's call (2026-07-18) and the right one: no new cost, same DC, already ZFS raidz2 + AES, and PBS natively provides dedup, incremental, retention (prune), scheduled **verify**, and **email notifications on failure** — which also covers most of P1's observability *for free, at the PBS layer, independent of WGDashboard's own (fragile) scheduler*. Feasibility confirmed 2026-07-18: VM 4001 reaches `pbs:8007`; PBS is 4.2.3 with one datastore `pbs-data`; only gap is the client package isn't installed yet. Alternatives (rejected/secondary): dedicated Hetzner Storage Box + restic (new cost + creds, no reuse), rsync/rclone (no dedup/encryption/retention).
+
+- **What to back up:** the *live source state*, not the app's own backup dirs — i.e. `/etc/wireguard/*.conf` + a fresh **DB dump** (`mysqldump`, heavy `*_transfer`/`*_history_endpoint` excluded) written to a staging dir + `wg-dashboard.ini`. PBS stores this as a `host/wg-dashboard` backup (`.pxar` + `.blob`), deduped and encrypted. This makes PBS a first-class, granular, off-VM backup of the actual system — restorable file-by-file without touching the VM image.
+- **Driver:** a small, self-contained systemd **timer** on VM 4001 running a `pbs-backup.sh` (pre-dump DB → `proxmox-backup-client backup`), **independent of the WGDashboard app scheduler** (the fragile part we don't want in the critical path). Optionally the app also triggers an ad-hoc PBS run after big changes, but the timer is the guarantee.
+- **Auth & encryption:** a PBS **API token** scoped by ACL to a `wg-dashboard` namespace/backup-id (least privilege, not root); client-side **encryption key**; both stored in **Vault** (referenced by id, never in the ini/plaintext). PBS repo string `token@pbs!tokenid@94.130.207.10:pbs-data`, `--ns wg-dashboard`.
+- **Retention & verify:** PBS prune job (e.g. keep-daily 14 / keep-weekly 8 / keep-monthly 6) + a weekly verify job on the namespace. Configured on PBS, visible in its task log/UI.
+- **Observability for free:** PBS email notifications on backup/verify failure (configure PBS notification target to `sergey.karlovskij@volia-software.com`). This is the durable "did last night's backup succeed?" signal — no app code needed. The in-app health panel (P1) can *also* read the last PBS run via the client for a single pane, but PBS alone already prevents another silent 2-month outage.
+- **Restore path:** `proxmox-backup-client restore host/wg-dashboard/<snap> <file> <dest>` → drop `.conf` back / import the SQL dump. Granular (one config) or full.
+- **Prereq install (needs your OK — prod change):** add the Proxmox no-subscription repo (or just the `proxmox-backup-client` package) on VM 4001.
+- **Tests:** `pbs-backup.sh` dry-run builds the staging set (configs + non-heavy dump + ini) correctly; a restore round-trip against a scratch PBS namespace; the timer failing (PBS unreachable) alerts via PBS + is recorded, and never impacts the running VPN.
 
 ### P3 — Storage & retention (disk-aware, self-cleaning)  *(ship third)*
 - **Replace `max_storage_mb=500`** with a disk-aware cap: `min(configured_gb, free_disk * fraction)` — *decision default:* `max_storage_gb=5` **and** never exceed 60 % of free disk, whichever is smaller; the local tier only needs a short window because P2 holds the long history off-host. Keep a small local N (e.g., daily 7 / weekly 4) locally, long retention lives in restic.
@@ -80,25 +84,36 @@ Each is independently testable with fakes; no cross-talk beyond the ledger + hea
 
 ## 7. Recommended order & rough effort
 
-1. **P1 Observability** — ~1 focused session. Immediate: you'd *know* the state. *Do this first even if nothing else.*
-2. **P2 Off-host DR** — ~1–2 sessions + your decision on target/cost. Biggest risk reducer.
-3. **P3 Storage/retention** — ~1 session. Also finally fixes the "500 MB" number properly.
-4. **P4 Restore verification/UX** — ~1 session.
+Revised after the PBS decision — PBS gives off-host DR **and** failure-notification with almost no app code, so it now leads:
+
+1. **P2 PBS off-host backup** — ~1 session (+ your OK to install the client & make PBS token/namespace). Delivers DR *and* the "did it run?" alert (PBS email) in one move. **Do this first.**
+2. **P1 In-app observability** — ~1 session. Now smaller: a durable ledger + health panel + stop-swallowing-errors; PBS already covers the critical alert, so this is the single-pane nicety and covers the app's *own* internal snapshots.
+3. **P3 Storage/retention** — ~1 session. Fixes the "500 MB" number properly (local tier can be small since PBS holds the long history).
+4. **P4 Restore verification/UX** — ~1 session (PBS verify covers off-host integrity; this adds app-side restore-tests + UI).
 
 ## 8. Decisions taken here (change any you dislike)
 
-- **Alert channel:** email via existing SMTP (v1). Alt: Matrix/webhook later.
-- **Off-host tool:** restic. Alt: borg.
-- **Off-host target:** dedicated Hetzner Storage Box (recommended) vs restic-REST on `pbs-vs10` (reuse). **← needs your pick (cost + creds).**
-- **Local cap:** `max_storage_gb=5` and ≤60 % free disk; long history off-host. Alt: keep MB-based but disk-aware.
-- **Traffic history:** excluded from recovery backups; optional DB trim (default off). Alt: keep full.
-- **Restore-test cadence:** monthly to a scratch schema. Alt: weekly / on-demand only.
+- **Off-host target: DECIDED — existing PBS `pbs-vs10`, datastore `pbs-data`, file-level via `proxmox-backup-client`** (Sergiy 2026-07-18). Alts rejected: Hetzner Storage Box + restic, rsync/rclone.
+- **PBS driver:** standalone systemd timer (independent of the app scheduler). Alt: app-triggered only (rejected — keeps the fragile scheduler in the DR path).
+- **Alert channel:** **PBS-native email** for the off-host layer (primary) + existing WGDashboard SMTP for the in-app layer (P1). Alt: Matrix/webhook later.
+- **PBS auth:** scoped API token + client-side encryption key, both in Vault. Alt: root token (rejected — least privilege).
+- **PBS retention:** keep-daily 14 / weekly 8 / monthly 6 + weekly verify (starting point, tune later).
+- **Local cap:** `max_storage_gb=5` and ≤60 % free disk; long history lives on PBS. Alt: keep MB-based but disk-aware.
+- **Traffic history:** excluded from recovery backups (PBS + app); optional DB trim (default off). Alt: keep full.
+- **Restore-test cadence:** monthly to a scratch schema (app) + PBS weekly verify (off-host). Alt: weekly / on-demand only.
 
 ## 9. Immediate low-risk quick wins (can precede the full plan, on your OK)
 
 - Raise `max_storage_mb` on prod now (e.g., 5000) so nothing self-deletes even before P3 — one config line + restart. *(Not done — prod change awaiting your OK.)*
 - One-off orphan cleanup of the 12 manifest-less global dirs on prod (frees space, de-clutters UI).
 
-## 10. Open question for you (only one that blocks P2)
+## 10. What's left needing your OK (all prod-infra changes)
 
-Off-host target: **Hetzner Storage Box (new, ~€3–4/mo, isolated)** or **restic-REST repo on the existing `pbs-vs10`** (no new cost, but shares fate with that box)? Everything else has a sensible default and can proceed.
+Off-host target is **decided (PBS)**; no design questions block progress. To *implement* P2 I need your go on these prod changes (I'll snapshot/confirm each):
+1. Install `proxmox-backup-client` on VM 4001 (Proxmox no-subscription repo or the single package).
+2. On PBS `pbs-vs10`: create a scoped API token + a `wg-dashboard` namespace/ACL, and a prune+verify job. (PBS is prod infra — your confirm.)
+3. Generate a client-side encryption key → store key + token in Vault.
+4. Deploy the `pbs-backup.sh` + systemd timer on VM 4001; run the first backup; verify a restore round-trip.
+5. Point PBS notifications at your email.
+
+Everything up to here (design) is done. Say "go P2" and I'll prepare the exact commands + do it step by step with your confirmations.
