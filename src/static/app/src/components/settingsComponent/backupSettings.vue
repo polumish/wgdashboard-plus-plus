@@ -371,14 +371,112 @@ watch(
     { deep: true }
 );
 
+// ─── Backup health (P1/P4) ──────────────────────────────────────────────────
+const health = ref(null);
+const healthLoading = ref(false);
+const restoreTestRunning = ref(false);
+
+function loadHealth() {
+    healthLoading.value = true;
+    fetchGet("/api/backup/health", {}, (res) => {
+        healthLoading.value = false;
+        if (res && res.status) health.value = res.data;
+    });
+}
+function runRestoreTestNow() {
+    restoreTestRunning.value = true;
+    fetchGet("/api/backup/restore/test", {}, () => {
+        restoreTestRunning.value = false;
+        loadHealth();
+    });
+}
+function fmtBytes(n) {
+    if (n === null || n === undefined) return "—";
+    const u = ["B", "KB", "MB", "GB", "TB"];
+    let v = n, i = 0;
+    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+    return v.toFixed(v < 10 && i > 0 ? 1 : 0) + " " + u[i];
+}
+function fmtTime(t) { return t ? dayjs(t).format("YYYY-MM-DD HH:mm") : "—"; }
+const healthMeta = computed(() => {
+    const map = {
+        green:   { cls: "success",   icon: "bi-check-circle-fill",         label: "Healthy" },
+        amber:   { cls: "warning",   icon: "bi-exclamation-triangle-fill", label: "Attention" },
+        red:     { cls: "danger",    icon: "bi-x-circle-fill",             label: "Problem" },
+        unknown: { cls: "secondary", icon: "bi-question-circle-fill",      label: "Unknown" },
+    };
+    return map[health.value?.status] || map.unknown;
+});
+
 onMounted(() => {
     loadSettings();
     loadBackups();
+    loadHealth();
 });
 </script>
 
 <template>
     <div class="d-flex flex-column" :style="{ gap: 'var(--density-gap, 1rem)' }">
+
+        <!-- ── 0. Backup Health Card ───────────────────────────────────────── -->
+        <div class="card rounded-3" v-if="health">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <h6 class="my-2">
+                    <i class="bi bi-heart-pulse me-2"></i>
+                    <LocaleText t="Backup Health"></LocaleText>
+                </h6>
+                <span class="badge rounded-pill" :class="`text-bg-${healthMeta.cls}`">
+                    <i class="bi me-1" :class="healthMeta.icon"></i>
+                    <LocaleText :t="healthMeta.label"></LocaleText>
+                </span>
+            </div>
+            <div class="card-body" :style="{ padding: 'var(--density-card-py, 1rem) var(--density-card-px, 1rem)', fontSize: 'var(--density-font, 0.875rem)' }">
+                <div class="row g-3">
+                    <div class="col-6 col-md-3">
+                        <div class="text-body-secondary small"><LocaleText t="Last successful backup"></LocaleText></div>
+                        <div class="fw-semibold">{{ fmtTime(health.last_global_success) }}</div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="text-body-secondary small"><LocaleText t="Consecutive failures"></LocaleText></div>
+                        <div class="fw-semibold" :class="{ 'text-danger': health.consecutive_failures > 0 }">{{ health.consecutive_failures }}</div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="text-body-secondary small"><LocaleText t="Off-site (PBS)"></LocaleText></div>
+                        <div class="fw-semibold">
+                            <i class="bi me-1" :class="health.off_host.status === 'OK' ? 'bi-cloud-check text-success' : (health.off_host.status === 'FAILED' ? 'bi-cloud-slash text-danger' : 'bi-cloud text-body-secondary')"></i>
+                            <span>{{ health.off_host.status }}</span>
+                            <span class="text-body-secondary small ms-1" v-if="health.off_host.timestamp">· {{ fmtTime(health.off_host.timestamp) }}</span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="text-body-secondary small"><LocaleText t="Last restore-test"></LocaleText></div>
+                        <div class="fw-semibold" v-if="health.last_restore_test">
+                            <i class="bi me-1" :class="health.last_restore_test.status === 'success' ? 'bi-shield-check text-success' : 'bi-shield-x text-danger'"></i>
+                            <span>{{ health.last_restore_test.status }}</span>
+                            <span class="text-body-secondary small ms-1">· {{ fmtTime(health.last_restore_test.ts) }}</span>
+                        </div>
+                        <div class="fw-semibold text-body-secondary" v-else>—</div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="text-body-secondary small"><LocaleText t="Disk free"></LocaleText></div>
+                        <div class="fw-semibold">{{ fmtBytes(health.disk_free) }}</div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="text-body-secondary small"><LocaleText t="Local backups size"></LocaleText></div>
+                        <div class="fw-semibold">{{ fmtBytes(health.local_total_size) }}</div>
+                    </div>
+                    <div class="col-12 col-md-6 d-flex align-items-end gap-2">
+                        <button class="btn btn-sm btn-outline-secondary rounded-3" @click="runRestoreTestNow" :disabled="restoreTestRunning">
+                            <i class="bi me-1" :class="restoreTestRunning ? 'bi-arrow-repeat' : 'bi-shield-check'"></i>
+                            <LocaleText t="Run restore-test now"></LocaleText>
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary rounded-3" @click="loadHealth" :disabled="healthLoading" title="Refresh">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- ── 1. Schedule + Storage Card ──────────────────────────────────── -->
         <div class="card rounded-3">
